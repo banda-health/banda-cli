@@ -22,7 +22,8 @@ async function checkPrerequisites(): Promise<void> {
 	}
 	// Ensure working directory is clean
 	try {
-		await execGitCmd(['status --porcelain'], config);
+		const data = (await execGitCmd(['status', '--porcelain'], config)) as Promise<string>;
+		console.log(data);
 	} catch {
 		// Uncommitted changes
 		logRed('Working directory is not clean. Please stash or commit changes before continuing.');
