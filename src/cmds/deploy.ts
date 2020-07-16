@@ -1,4 +1,34 @@
+import chalk from 'chalk';
+import { execGitCmd } from 'run-git-command';
+import { commandConfig } from 'run-git-command/types';
 import { Argv } from 'yargs';
+
+const config: commandConfig = {
+	logProcess: false,
+};
+
+function logRed(message: string): void {
+	console.log(chalk.red(message));
+}
+
+async function checkPrerequisites(): Promise<void> {
+	// Check if git is installed
+	try {
+		await execGitCmd(['--version'], config);
+	} catch {
+		// Git is not installed
+		logRed('Git is not installed. Please install before continuing.');
+		return Promise.reject();
+	}
+	// Ensure working directory is clean
+	try {
+		await execGitCmd(['status --porcelain'], config);
+	} catch {
+		// Uncommitted changes
+		logRed('Working directory is not clean. Please stash or commit changes before continuing.');
+		return Promise.reject();
+	}
+}
 
 export const command = 'deploy [targetBranch]';
 export const desc = 'Manage set of tracked repos';
@@ -36,7 +66,10 @@ export const builder = (yargs: Argv<{}>): void => {
 			description: 'The file where the version number is tracked',
 		});
 };
-export const handler = (argv) => {
+export const handler = async (argv) => {
+	try {
+		await checkPrerequisites();
+	} catch {}
 	if (argv.verbose) console.info(`start server on :${argv.port}`);
 	// serve(argv.port);
 };

@@ -24,6 +24,7 @@
     "arg": "^4.1.3",
     "chalk": "^4.1.0",
     "esm": "^3.2.25",
+    "run-git-command": "^1.2.3",
     "yargs": "^15.4.1"
   },
   "devDependencies": {
