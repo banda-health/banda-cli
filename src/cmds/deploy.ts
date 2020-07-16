@@ -7,28 +7,25 @@ const config: commandConfig = {
 	logProcess: false,
 };
 
-function logRed(message: string): void {
-	console.log(chalk.red(message));
-}
-
-async function checkPrerequisites(): Promise<void> {
+async function checkPrerequisites(): Promise<string> {
 	// Check if git is installed
 	try {
 		await execGitCmd(['--version'], config);
 	} catch {
 		// Git is not installed
-		logRed('Git is not installed. Please install before continuing.');
-		return Promise.reject();
+		return Promise.reject('Git is not installed. Please install before continuing.');
 	}
 	// Ensure working directory is clean
 	try {
 		const data = (await execGitCmd(['status', '--porcelain'], config)) as Promise<string>;
-		console.log(data);
+		if (data) {
+			return Promise.reject('Working directory is not clean. Please stash or commit changes before continuing.');
+		}
 	} catch {
 		// Uncommitted changes
-		logRed('Working directory is not clean. Please stash or commit changes before continuing.');
-		return Promise.reject();
+		return Promise.reject('There was an error checking workspace cleanliness.');
 	}
+	return Promise.resolve('');
 }
 
 export const command = 'deploy [targetBranch]';
@@ -70,7 +67,9 @@ export const builder = (yargs: Argv<{}>): void => {
 export const handler = async (argv) => {
 	try {
 		await checkPrerequisites();
-	} catch {}
+	} catch (e) {
+		console.log(chalk.red(e));
+	}
 	if (argv.verbose) console.info(`start server on :${argv.port}`);
 	// serve(argv.port);
 };
