@@ -29,6 +29,11 @@ export const builder = (yargs: Argv<{}>): void => {
 			alias: 'n',
 			type: 'string',
 			description: 'Specify the version number to update the development branch to',
+		})
+		.option('versionFile', {
+			alias: 'f',
+			type: 'string',
+			description: 'The file where the version number is tracked',
 		});
 };
 export const handler = (argv) => {
