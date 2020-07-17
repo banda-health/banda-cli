@@ -272,7 +272,7 @@ async function getVariables(): Promise<string> {
 	}
 
 	// Get the current app version
-	const targetPackageVersion = getPackageJsonVersion();
+	const targetPackageVersion = await getPackageJsonVersion();
 
 	// Check out the source branch so we can get that version
 	process.stdout.write(`Fetching source branch '${sourceBranch}'...`);
@@ -290,7 +290,7 @@ async function getVariables(): Promise<string> {
 	}
 
 	// Get the current app version
-	const sourcePackageVersion = getPackageJsonVersion();
+	const sourcePackageVersion = await getPackageJsonVersion();
 
 	// Ask the user what version they want to use
 	console.log(`Source version: ${sourcePackageVersion}, Target version: ${targetPackageVersion}`);
@@ -428,7 +428,7 @@ async function run(): Promise<string> {
 					console.log(chalk.green('no merge conflicts'));
 
 					// Update version number in appropriate file, if necessary
-					const currentPackageVersion = getPackageJsonVersion();
+					const currentPackageVersion = await getPackageJsonVersion();
 					if (currentPackageVersion !== packageVersion) {
 						process.stdout.write(
 							`Updating and commiting the new package version '${packageVersion}' in release branch '${releaseBranch}'...`,
@@ -554,7 +554,7 @@ async function run(): Promise<string> {
 	}
 
 	// Update version number in appropriate file, if necessary
-	const currentPackageVersion = getPackageJsonVersion();
+	const currentPackageVersion = await getPackageJsonVersion();
 	if (currentPackageVersion !== nextPackageVersion) {
 		process.stdout.write(
 			`Updating and commiting the new package version '${nextPackageVersion}' in branch '${developmentMergeBranch}'...`,
@@ -577,6 +577,8 @@ async function run(): Promise<string> {
 	try {
 		await execGitCmd(['push', remote, developmentBranch], gitConfig);
 		console.log(chalk.green('done'));
+		console.log(`Removing temporary merge branch '${developmentMergeBranch}'.`);
+		await execGitCmd(['branch', '-d', developmentMergeBranch], gitConfig);
 	} catch {
 		// If there was an error with the previous command, it (probably) means they don't have permission to write to this branch
 		// Since they can't push to the target branch, push the release and say they need to have someone else merge it
@@ -601,7 +603,7 @@ async function run(): Promise<string> {
  */
 async function finish() {
 	// Clean up all the files
-	// resetDeploy();
+	resetDeploy();
 
 	// Check out original branch user was on
 	await execGitCmd(['checkout', initialBranch], gitConfig);
@@ -617,7 +619,7 @@ async function main(argv): Promise<void> {
 	} catch (e) {
 		console.log(chalk.red(e));
 	} finally {
-		finish();
+		await finish();
 	}
 	// if (argv.verbose) console.info(`start server on :${argv.port}`);
 	// // serve(argv.port);

@@ -43,8 +43,16 @@ function getPackageJsonFilePath(): string {
 	return `${process.cwd()}/package.json`;
 }
 
-export function getPackageJsonVersion(): string {
-	return require(getPackageJsonFilePath())['version'];
+export async function getPackageJsonVersion(): Promise<string> {
+	return new Promise((resolve, reject) => {
+		fs.readFile(getPackageJsonFilePath(), 'utf8', (err, data) => {
+			if (err) {
+				reject(err);
+				return;
+			}
+			resolve(data.match(/"version":\s?"(\d+\.\d+\.\d+)"/)[1]);
+		});
+	});
 }
 
 export async function updatePackageJsonVersion(currentVersion: string, versionToUse: string): Promise<void> {
