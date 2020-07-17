@@ -260,8 +260,9 @@ async function getVariables(): Promise<string> {
 	// Check out the target branch so we can get that version
 	process.stdout.write(`Fetching target branch '${targetBranch}'...`);
 	await execGitCmd(['checkout', targetBranch], gitConfig);
-	await execGitCmd(['pull', remote, targetBranch], gitConfig);
+	// See if we get any merge conflicts
 	try {
+		await execGitCmd(['pull', remote, targetBranch], gitConfig);
 		await checkForMergeConflictsOnCurrentBranch();
 		console.log(chalk.green('done'));
 	} catch {
@@ -277,9 +278,9 @@ async function getVariables(): Promise<string> {
 	// Check out the source branch so we can get that version
 	process.stdout.write(`Fetching source branch '${sourceBranch}'...`);
 	await execGitCmd(['checkout', sourceBranch], gitConfig);
-	await execGitCmd(['pull', remote, sourceBranch], gitConfig);
 	// Make sure no merge conflicts exist
 	try {
+		await execGitCmd(['pull', remote, sourceBranch], gitConfig);
 		await checkForMergeConflictsOnCurrentBranch();
 		console.log(chalk.green('done'));
 	} catch {
@@ -406,28 +407,32 @@ async function run(): Promise<string> {
 
 						// Merge source to release branch
 						console.log(`Merging '${sourceBranch}' -> '${releaseBranch}'`);
-						await execGitCmd(['merge', sourceBranch], gitConfig);
+						try {
+							await execGitCmd(['merge', sourceBranch], gitConfig);
+						} catch (e) {
+							// There was an error, most likely a merge conflict
+							// Confirm the merge conflict
+							try {
+								await checkForMergeConflictsOnCurrentBranch();
+							} catch {
+								// Yep, there was a merge conflict
+								touch(progressFile.sourceMergeLockFile);
+								return Promise.reject(
+									`There are merge conflicts between the source and release branches. Please fix the conflicts, commit them to branch '${releaseBranch}', and resume the process.`,
+								);
+							}
+							// Otherwise, an error occurred that wasn't related to merging
+							return Promise.reject(e);
+						}
 					} else {
 						// Remove the lock file since it's not needed anymore
 						try {
 							fs.unlinkSync(progressFile.sourceMergeLockFile);
 						} catch {}
 					}
-					// Check if there are any files needing merging
-					process.stdout.write(`Checking for any merge conflicts in '${releaseBranch}'...`);
-					await execGitCmd(['checkout', releaseBranch], gitConfig);
-					try {
-						await checkForMergeConflictsOnCurrentBranch();
-					} catch {
-						console.log();
-						touch(progressFile.sourceMergeLockFile);
-						return Promise.reject(
-							`There are merge conflicts between the source and release branches. Please fix the conflicts, commit them to branch '$releaseBranch', and resume the process.`,
-						);
-					}
-					console.log(chalk.green('no merge conflicts'));
 
 					// Update version number in appropriate file, if necessary
+					await execGitCmd(['checkout', releaseBranch], gitConfig);
 					const currentPackageVersion = await getPackageJsonVersion();
 					if (currentPackageVersion !== packageVersion) {
 						process.stdout.write(
@@ -479,7 +484,7 @@ async function run(): Promise<string> {
 					await execGitCmd(['push', remote, '-d', releaseBranch], gitConfig);
 				}
 
-				// Remove the local release branch
+				// Remove the local release branch (one would only be at the remote if we failed previously)
 				try {
 					await execGitCmd(['branch', '-D', releaseBranch], gitConfig);
 				} catch {}
@@ -517,13 +522,24 @@ async function run(): Promise<string> {
 		// Checkout development branch
 		process.stdout.write(`Fetching development branch '${developmentBranch}'...`);
 		await execGitCmd(['checkout', developmentBranch], gitConfig);
-		await execGitCmd(['pull', remote, developmentBranch], gitConfig);
+		// See if we get any merge conflicts
 		try {
-			await checkForMergeConflictsOnCurrentBranch();
-		} catch {
-			console.log();
+			await execGitCmd(['pull', remote, developmentBranch], gitConfig);
+		} catch (e) {
+			// See if there were any merge conflicts
+			try {
+				await checkForMergeConflictsOnCurrentBranch();
+			} catch {
+				// Yep, there were merge conflicts
+				console.log();
+				touch(progressFile.developmentPullMergeLockFile);
+				return Promise.reject(
+					'There were merge conflicts when pulling from remote. Please fix and resume the process.',
+				);
+			}
+			// Otherwise, an error occured when pulling
 			touch(progressFile.developmentPullMergeLockFile);
-			return Promise.reject('There were merge conflicts when pulling from remote. Please fix and resume the process.');
+			return Promise.reject(e);
 		}
 		console.log(chalk.green('done'));
 
@@ -536,8 +552,6 @@ async function run(): Promise<string> {
 		} catch {}
 		await execGitCmd(['checkout', '-b', developmentMergeBranch], gitConfig);
 		console.log(chalk.green('done'));
-		console.log(`Merging '${targetBranch}' -> '${developmentMergeBranch}'`);
-		await execGitCmd(['merge', targetBranch], gitConfig);
 	} else {
 		try {
 			fs.unlinkSync(progressFile.developmentMergeLockFile);
@@ -546,11 +560,20 @@ async function run(): Promise<string> {
 
 	// Make sure there aren't any merge conflicts
 	await execGitCmd(['checkout', developmentMergeBranch], gitConfig);
+	console.log(`Merging '${targetBranch}' -> '${developmentMergeBranch}'`);
 	try {
-		await checkForMergeConflictsOnCurrentBranch();
-	} catch {
+		await execGitCmd(['merge', targetBranch], gitConfig);
+	} catch (e) {
+		// See if there were any merge conflicts
+		try {
+			await checkForMergeConflictsOnCurrentBranch();
+		} catch {
+			// Yep, there were merge conflicts
+			touch(progressFile.developmentMergeLockFile);
+			return Promise.reject('There were merge conflicts when merging. Please fix and resume the process.');
+		}
 		touch(progressFile.developmentMergeLockFile);
-		return Promise.reject('There were merge conflicts when merging. Please fix and resume the process.');
+		return Promise.reject(e);
 	}
 
 	// Update version number in appropriate file, if necessary
@@ -606,7 +629,7 @@ async function finish() {
 	resetDeploy();
 
 	// Check out original branch user was on
-	await execGitCmd(['checkout', initialBranch], gitConfig);
+	await execGitCmd(['checkout', initialBranch || developmentBranch], gitConfig);
 
 	console.log(chalk.green('Finished!'));
 }
@@ -616,10 +639,9 @@ async function main(argv): Promise<void> {
 		await checkPrerequisites();
 		await getVariables();
 		await run();
+		await finish();
 	} catch (e) {
 		console.log(chalk.red(e));
-	} finally {
-		await finish();
 	}
 	// if (argv.verbose) console.info(`start server on :${argv.port}`);
 	// // serve(argv.port);
