@@ -30,7 +30,7 @@ let targetBranch: string;
 let developmentBranch: string;
 let packageVersion: string;
 let nextPackageVersion: string;
-// This variable isn't directly user-input, but it's calculated off $packageVersion
+// This variable isn't directly user-input, but it's calculated off packageVersion
 let tag: string;
 
 // Other script variables
@@ -181,7 +181,7 @@ async function getVariables(): Promise<string> {
 					default: true,
 				},
 			])
-		)['answer'];
+		)['answer'] as boolean;
 		if (shouldContinue) {
 			console.log('Resuming...');
 			loadUsersVariables();

@@ -1,2 +1,2 @@
 # banda-cli
-CLI for Banda any needs
+CLI for all your Banda needs
