@@ -1,9 +1,12 @@
 {
 	"compilerOptions": {
+    "target": "es5",
+    "module": "commonjs",
+    "lib": ["es2015"],
 		"outDir": "./build",
 		"allowJs": false,
-		"target": "es5",
 		"esModuleInterop": true
 	},
-	"include": ["./src/**/*"]
+	"include": ["./src/**/*", "__mocks__", "__tests__"],
+  "exclude": ["node_modules", "**/*.spec.ts"]
 }
