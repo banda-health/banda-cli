@@ -50,7 +50,12 @@ export async function getPackageJsonVersion(): Promise<string> {
 				reject(err);
 				return;
 			}
-			resolve(data.match(/"version":\s?"(\d+\.\d+\.\d+)"/)[1]);
+			const match = data.match(/"version":\s?"(\d+\.\d+\.\d+)"/);
+			if (!match || !match.length) {
+				reject('No version found.');
+				return;
+			}
+			resolve(match[1]);
 		});
 	});
 }
