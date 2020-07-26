@@ -92,3 +92,15 @@ export function touch(fileName: string): void {
 		fs.closeSync(fs.openSync(fileName, 'w'));
 	}
 }
+
+export function createReleaseTag(versionNumber: string): string {
+	return `v${versionNumber}`;
+}
+
+export function createReleaseBranchName(tag: string): string {
+	return `release/${tag}`;
+}
+
+export function createDevelopmentMergeBranchName(targetBranch: string, developmentBranch: string): string {
+	return `merge-banda/${targetBranch}-to-${developmentBranch}`;
+}

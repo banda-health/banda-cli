@@ -1,19 +1,22 @@
 import chalk from 'chalk';
 import fs from 'fs';
-import inquirer from 'inquirer';
+import { prompt } from 'inquirer';
 import { execGitCmd } from 'run-git-command';
 import { Argv } from 'yargs';
 import { gitConfig } from '../utils/constants';
 import {
 	checkForMergeConflictsOnCurrentBranch,
 	checkIfRemoteExists,
+	createDevelopmentMergeBranchName,
+	createReleaseBranchName,
+	createReleaseTag,
 	getFileNameSaveCwd,
 	getPackageJsonVersion,
 	touch,
 	updatePackageJsonVersion,
 } from '../utils/utils';
 
-type UsersVariables = {
+export interface UsersVariables {
 	remote: string;
 	sourceBranch: string;
 	targetBranch: string;
@@ -21,7 +24,7 @@ type UsersVariables = {
 	packageVersion: string;
 	nextPackageVersion: string;
 	tag: string;
-};
+}
 
 // Script user-input variables
 let remote: string;
@@ -173,7 +176,7 @@ async function getVariables(): Promise<string> {
 	// Ask the user if they want to continue from the previous execution
 	if (fs.existsSync(progressFile.variableSaveFile)) {
 		const shouldContinue = (
-			await inquirer.prompt([
+			await prompt([
 				{
 					type: 'confirm',
 					name: 'answer',
@@ -192,7 +195,7 @@ async function getVariables(): Promise<string> {
 
 	// Confirm Git remote to use (default origin)
 	remote = (
-		await inquirer.prompt([
+		await prompt([
 			{
 				type: 'input',
 				name: 'answer',
@@ -208,7 +211,7 @@ async function getVariables(): Promise<string> {
 	let sourceBranchToSuggest = initialBranch === defaultTargetBranch ? defaultSourceBranch : initialBranch;
 	// Confirm source branch (default the branch they're on, unless it's master)
 	sourceBranch = (
-		await inquirer.prompt([
+		await prompt([
 			{
 				type: 'input',
 				name: 'answer',
@@ -221,7 +224,7 @@ async function getVariables(): Promise<string> {
 
 	// Confirm target branch (default master)
 	targetBranch = (
-		await inquirer.prompt([
+		await prompt([
 			{
 				type: 'input',
 				name: 'answer',
@@ -237,7 +240,7 @@ async function getVariables(): Promise<string> {
 
 	// Confirm development branch
 	developmentBranch = (
-		await inquirer.prompt([
+		await prompt([
 			{
 				type: 'input',
 				name: 'answer',
@@ -305,10 +308,10 @@ async function getVariables(): Promise<string> {
 		if (packageVersion) {
 			console.log(chalk.red(`Version '${packageVersion}' is not in the correct format of #.#.#. Please enter again.`));
 		}
-		packageVersion = (await inquirer.prompt([packageQuestion]))['answer'];
+		packageVersion = (await prompt([packageQuestion]))['answer'];
 	}
 
-	tag = `v${packageVersion}-kevin-test`;
+	tag = createReleaseTag(packageVersion);
 	process.stdout.write('Checking tag uniqueness...');
 	await execGitCmd(['fetch', '--all', '--tags', '--force'], gitConfig);
 	// Check if the tag exists and, if it does, abort
@@ -337,7 +340,7 @@ async function getVariables(): Promise<string> {
 				chalk.red(`Version '${nextPackageVersion}' is not in the correct format of #.#.#. Please enter again.`),
 			);
 		}
-		nextPackageVersion = (await inquirer.prompt([nextPackageQuestion]))['answer'];
+		nextPackageVersion = (await prompt([nextPackageQuestion]))['answer'];
 	}
 
 	// If we've made it here, we can save these variables to a file in case the process fails and needs to be restarted
@@ -378,8 +381,8 @@ async function getVariables(): Promise<string> {
  */
 async function run(): Promise<string> {
 	// Branch to release branch (branch release-{tag})
-	const releaseBranch = `release/${tag}`;
-	const developmentMergeBranch = `merge-banda/${targetBranch}-to-${developmentBranch}`;
+	const releaseBranch = createReleaseBranchName(tag);
+	const developmentMergeBranch = createDevelopmentMergeBranchName(targetBranch, developmentBranch);
 
 	const sourceMergeLockFileIsMissing = !fs.existsSync(progressFile.sourceMergeLockFile);
 	const targetMergeLockFileIsMissing = !fs.existsSync(progressFile.targetMergeLockFile);
