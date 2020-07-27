@@ -411,7 +411,7 @@ async function run(): Promise<string> {
 						// Merge source to release branch
 						console.log(`Merging '${sourceBranch}' -> '${releaseBranch}'`);
 						try {
-							await execGitCmd(['merge', sourceBranch], gitConfig);
+							await execGitCmd(['merge', '--no-ff', sourceBranch], gitConfig);
 						} catch (e) {
 							// There was an error, most likely a merge conflict
 							// Confirm the merge conflict
@@ -453,7 +453,7 @@ async function run(): Promise<string> {
 					// Merge release to target
 					console.log(`Merging '${releaseBranch}' -> '${targetBranch}'`);
 					await execGitCmd(['checkout', targetBranch], gitConfig);
-					await execGitCmd(['merge', releaseBranch], gitConfig);
+					await execGitCmd(['merge', '--no-ff', releaseBranch], gitConfig);
 
 					// Push the new target branch
 					process.stdout.write(`Pushing '${targetBranch}' to remote...`);
@@ -565,7 +565,7 @@ async function run(): Promise<string> {
 	await execGitCmd(['checkout', developmentMergeBranch], gitConfig);
 	console.log(`Merging '${targetBranch}' -> '${developmentMergeBranch}'`);
 	try {
-		await execGitCmd(['merge', targetBranch], gitConfig);
+		await execGitCmd(['merge', '--no-ff', targetBranch], gitConfig);
 	} catch (e) {
 		// See if there were any merge conflicts
 		try {
@@ -597,7 +597,7 @@ async function run(): Promise<string> {
 	// Merge to development branch and push
 	console.log(`Merging '${developmentMergeBranch}' -> '${developmentBranch}'`);
 	await execGitCmd(['checkout', developmentBranch], gitConfig);
-	await execGitCmd(['merge', developmentMergeBranch], gitConfig);
+	await execGitCmd(['merge', '--no-ff', developmentMergeBranch], gitConfig);
 
 	process.stdout.write(`Pushing '${developmentBranch}' to remote...`);
 	try {

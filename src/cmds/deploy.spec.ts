@@ -51,10 +51,10 @@ describe('deploy', () => {
 	commandReturns[`push ${REMOTE} -d ${branch.RELEASE_BRANCH}`] = Promise.resolve();
 	commandReturns[`tag -l ${TAG}`] = Promise.resolve();
 	commandReturns[`tag -a ${TAG} -m "Merging branch '${branch.RELEASE_BRANCH}'"`] = Promise.resolve();
-	commandReturns[`merge ${branch.SOURCE}`] = Promise.resolve();
-	commandReturns[`merge ${branch.RELEASE_BRANCH}`] = Promise.resolve();
-	commandReturns[`merge ${branch.TARGET}`] = Promise.resolve();
-	commandReturns[`merge ${branch.DEVELOPMENT_MERGE}`] = Promise.resolve();
+	commandReturns[`merge --no-ff ${branch.SOURCE}`] = Promise.resolve();
+	commandReturns[`merge --no-ff ${branch.RELEASE_BRANCH}`] = Promise.resolve();
+	commandReturns[`merge --no-ff ${branch.TARGET}`] = Promise.resolve();
+	commandReturns[`merge --no-ff ${branch.DEVELOPMENT_MERGE}`] = Promise.resolve();
 	commandReturns[`branch -d ${branch.DEVELOPMENT_MERGE}`] = Promise.resolve();
 	commandReturns[`branch -D ${branch.DEVELOPMENT_MERGE}`] = Promise.resolve();
 
