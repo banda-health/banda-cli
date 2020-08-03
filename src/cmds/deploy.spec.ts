@@ -34,37 +34,6 @@ const TAG = `v${version.USE}`;
 const TEST_CWD = 'test/directory';
 
 describe('deploy', () => {
-	const commandReturns: { [joinedCommand: string]: Promise<any> } = {};
-	commandReturns[`checkout ${branch.TARGET}`] = Promise.resolve();
-	commandReturns[`checkout ${branch.SOURCE}`] = Promise.resolve();
-	commandReturns[`checkout -b ${branch.RELEASE_BRANCH}`] = Promise.resolve();
-	commandReturns[`checkout -b ${branch.DEVELOPMENT_MERGE}`] = Promise.resolve();
-	commandReturns[`checkout ${branch.RELEASE_BRANCH}`] = Promise.resolve();
-	commandReturns[`checkout ${branch.DEVELOPMENT}`] = Promise.resolve();
-	commandReturns[`checkout ${branch.DEVELOPMENT_MERGE}`] = Promise.resolve();
-	commandReturns[`checkout ${branch.CURRENT}`] = Promise.resolve();
-	commandReturns[`pull ${REMOTE} ${branch.TARGET}`] = Promise.resolve();
-	commandReturns[`pull ${REMOTE} ${branch.SOURCE}`] = Promise.resolve();
-	commandReturns[`pull ${REMOTE} ${branch.DEVELOPMENT}`] = Promise.resolve();
-	commandReturns[`push ${REMOTE} ${branch.TARGET}`] = Promise.resolve();
-	commandReturns[`push ${REMOTE} ${branch.DEVELOPMENT}`] = Promise.resolve();
-	commandReturns[`push ${REMOTE} ${TAG}`] = Promise.resolve();
-	commandReturns[`push -u ${REMOTE} ${branch.RELEASE_BRANCH}`] = Promise.resolve();
-	commandReturns[`push -u ${REMOTE} ${branch.DEVELOPMENT_MERGE}`] = Promise.resolve();
-	commandReturns[`push ${REMOTE} -d ${branch.RELEASE_BRANCH}`] = Promise.resolve();
-	commandReturns[`tag -l ${TAG}`] = Promise.resolve();
-	commandReturns[`tag -a ${TAG} -m "Merging branch '${branch.RELEASE_BRANCH}'"`] = Promise.resolve();
-	commandReturns[`merge --no-ff ${branch.SOURCE}`] = Promise.resolve();
-	commandReturns[`merge --no-ff ${branch.RELEASE_BRANCH}`] = Promise.resolve();
-	commandReturns[`merge --no-ff ${branch.TARGET}`] = Promise.resolve();
-	commandReturns[`merge --no-ff ${branch.DEVELOPMENT_MERGE}`] = Promise.resolve();
-	commandReturns[`branch -d ${branch.DEVELOPMENT_MERGE}`] = Promise.resolve();
-	commandReturns[`branch -D ${branch.DEVELOPMENT_MERGE}`] = Promise.resolve();
-
-	const setGitCommands = (commandsAndTheirReturns = commandReturns) => {
-		require('run-git-command').__setMockResponse(commandsAndTheirReturns);
-	};
-
 	const initPrerequisites = (): void => {
 		mockedUtils.isGitInstalled = jest.fn().mockReturnValue(true);
 		mockedUtils.isWorkingDirectoryClean = jest.fn().mockReturnValue(true);
@@ -72,15 +41,13 @@ describe('deploy', () => {
 
 	const loggedOutput: string[] = [];
 	beforeEach(() => {
-		initPrerequisites();
-		setGitCommands();
+		setupSuccessfulExecution();
 		const stdoutSpy = jest.spyOn(process.stdout, 'write');
 		stdoutSpy.mockImplementation((...inputs) => {
 			loggedOutput.push(...(inputs as string[]));
 			return true;
 		});
-		const cwdSpy = jest.spyOn(process, 'cwd');
-		cwdSpy.mockImplementation(() => TEST_CWD);
+		mockedUtils.getFileNameSaveCwd = jest.fn().mockReturnValue(TEST_CWD);
 		const consoleLogSpy = jest.spyOn(global.console, 'log');
 		consoleLogSpy.mockImplementation((...inputs) => {
 			loggedOutput.push(...(inputs as string[]));
@@ -93,6 +60,7 @@ describe('deploy', () => {
 	});
 
 	const setupSuccessfulVariableInput = (shouldAppendResumeAnswer: boolean = false): void => {
+		initPrerequisites();
 		(inquirer as any).prompt = jest.fn();
 		if (shouldAppendResumeAnswer) {
 			(inquirer as any).prompt.mockReturnValueOnce({ answer: false });
@@ -104,15 +72,41 @@ describe('deploy', () => {
 			.mockReturnValueOnce({ answer: branch.DEVELOPMENT })
 			.mockReturnValueOnce({ answer: version.USE })
 			.mockReturnValueOnce({ answer: version.NEXT });
-		mockedUtils.doesRemoteExist = jest.fn().mockReturnValue(true);
-		mockedUtils.doMergeConflictsExistOnCurrentBranch = jest.fn().mockReturnValue(Promise.resolve());
-		mockedUtils.isBranchCleanWhenUpdatedFromRemote = jest.fn().mockReturnValue(true);
-		mockedUtils.getPackageJsonVersion = jest.fn().mockReturnValue(version.SOURCE);
-		mockedUtils.createReleaseBranchName = jest.fn().mockReturnValue(branch.RELEASE_BRANCH);
 		mockedUtils.createDevelopmentMergeBranchName = jest.fn().mockReturnValue(branch.DEVELOPMENT_MERGE);
+		mockedUtils.createReleaseBranchName = jest.fn().mockReturnValue(branch.RELEASE_BRANCH);
 		mockedUtils.createReleaseTag = jest.fn().mockReturnValue(TAG);
-		mockedUtils.updatePackageJsonVersion = jest.fn();
+		mockedUtils.createTag = jest.fn().mockReturnValue(Promise.resolve(true));
+		mockedUtils.doesRemoteExist = jest.fn().mockReturnValue(true);
 		mockedUtils.doesTagExist = jest.fn().mockReturnValue(Promise.resolve(false));
+		mockedUtils.doMergeConflictsExistOnCurrentBranch = jest.fn().mockReturnValue(Promise.resolve(false));
+		mockedUtils.getCurrentBranch = jest.fn().mockReturnValue(Promise.resolve(branch.CURRENT));
+		mockedUtils.getPackageJsonVersion = jest.fn().mockReturnValue(version.SOURCE);
+		mockedUtils.isBranchCleanWhenUpdatedFromRemote = jest.fn().mockReturnValue(true);
+	};
+
+	const setupSuccessfulExecution = () => {
+		mockedUtils.checkoutBranch = jest.fn().mockReturnValue(Promise.resolve(true));
+		mockedUtils.commitToBranch = jest.fn().mockReturnValue(Promise.resolve(true));
+		mockedUtils.createAndCheckoutBranch = jest.fn().mockReturnValue(Promise.resolve(true));
+		mockedUtils.createDevelopmentMergeBranchName = jest.fn().mockReturnValue(branch.DEVELOPMENT_MERGE);
+		mockedUtils.createReleaseBranchName = jest.fn().mockReturnValue(branch.RELEASE_BRANCH);
+		mockedUtils.createReleaseTag = jest.fn().mockReturnValue(TAG);
+		mockedUtils.createTag = jest.fn().mockReturnValue(Promise.resolve(true));
+		mockedUtils.deleteLocalBranch = jest.fn().mockReturnValue(Promise.resolve(true));
+		mockedUtils.deleteRemoteBranch = jest.fn().mockReturnValue(Promise.resolve(true));
+		mockedUtils.doesRemoteExist = jest.fn().mockReturnValue(true);
+		mockedUtils.doesTagExist = jest.fn().mockReturnValue(Promise.resolve(false));
+		mockedUtils.doMergeConflictsExistOnCurrentBranch = jest.fn().mockReturnValue(Promise.resolve(false));
+		mockedUtils.getCurrentBranch = jest.fn().mockReturnValue(Promise.resolve(branch.CURRENT));
+		mockedUtils.getPackageJsonVersion = jest.fn().mockReturnValue(version.SOURCE);
+		mockedUtils.isBranchCleanWhenUpdatedFromRemote = jest.fn().mockReturnValue(true);
+		mockedUtils.isGitInstalled = jest.fn().mockReturnValue(Promise.resolve(true));
+		mockedUtils.isWorkingDirectoryClean = jest.fn().mockReturnValue(Promise.resolve(true));
+		mockedUtils.mergeBranch = jest.fn().mockReturnValue(Promise.resolve());
+		mockedUtils.pullBranchFromRemote = jest.fn().mockReturnValue(Promise.resolve(true));
+		mockedUtils.pushToRemote = jest.fn().mockReturnValue(Promise.resolve(true));
+		mockedUtils.touch = jest.fn();
+		mockedUtils.updatePackageJsonVersion = jest.fn();
 	};
 
 	const configureToOnlyRunVariableInput = (): void => {
