@@ -5,6 +5,7 @@ import { gitConfig, semverRegex } from './constants';
 /**
  * @async
  * Check if Git is installed
+ * @returns Boolean of whether Git CLI is installed
  */
 export async function isGitInstalled(): Promise<boolean> {
 	try {
@@ -17,6 +18,20 @@ export async function isGitInstalled(): Promise<boolean> {
 /**
  * @async
  * Ensure there are no staged or pending changes in the current working directory
+ * @returns Boolean of whether the current directory is a Git repo
+ */
+export async function isCurrentDirectoryGitRepo(): Promise<boolean> {
+	try {
+		await execGitCmd(['status'], gitConfig);
+		return true;
+	} catch {}
+	return false;
+}
+
+/**
+ * @async
+ * Ensure there are no staged or pending changes in the current working directory
+ * @returns Boolean of whether the working directory is clean
  */
 export async function isWorkingDirectoryClean(): Promise<boolean> {
 	try {
@@ -29,6 +44,7 @@ export async function isWorkingDirectoryClean(): Promise<boolean> {
 /**
  * @async
  * Get the current branch the user is on, if any
+ * @returns The current branch name
  */
 export async function getCurrentBranch(): Promise<string> {
 	try {
@@ -41,6 +57,7 @@ export async function getCurrentBranch(): Promise<string> {
  * @async
  * Checkout the specified branch
  * @param branch Branch to checkout
+ * @returns Whether branch checkout was successful or not
  */
 export async function checkoutBranch(branch: string): Promise<boolean> {
 	try {
@@ -55,6 +72,7 @@ export async function checkoutBranch(branch: string): Promise<boolean> {
  * Pull latest from the remote and determine if there are merge conflicts
  * @param remote The remote to use when pulling.
  * @param branch The remote branch to pull from
+ * @returns Whether there are any merge conflicts after the branch is pulled from remote
  */
 export async function isBranchCleanWhenUpdatedFromRemote(remote: string, branch: string): Promise<boolean> {
 	try {
@@ -68,6 +86,7 @@ export async function isBranchCleanWhenUpdatedFromRemote(remote: string, branch:
 /**
  * @async
  * Check if a remote exists, with an optional second argument to check for a branch on remote
+ * @returns Whether the remote exists
  */
 export async function doesRemoteExist(remote: string, branch?: string): Promise<boolean> {
 	// If no branch provided, just check the remote
@@ -89,6 +108,7 @@ export async function doesRemoteExist(remote: string, branch?: string): Promise<
  * @async
  * Fetch all tags from all remotes and see if the specified tag exists
  * @param tag The tag to check
+ * @returns Whether the tag exists in any remote
  */
 export async function doesTagExist(tag: string): Promise<boolean> {
 	try {
@@ -104,6 +124,7 @@ export async function doesTagExist(tag: string): Promise<boolean> {
  * @example
  * 1.4.0 -> 1.5.0
  * 1.5.9 -> 1.6.0
+ * @returns The suggested next package version
  */
 export function getSuggestedNextPackageVersion(currentVersion: string): string {
 	if (!semverRegex.test(currentVersion)) {
@@ -118,6 +139,7 @@ export function getSuggestedNextPackageVersion(currentVersion: string): string {
 /**
  * @async
  * Check if there are any files with merge conflicts
+ * @returns Whether merge conflicts exist on the current branch or not
  */
 export async function doMergeConflictsExistOnCurrentBranch(): Promise<boolean> {
 	try {
@@ -127,6 +149,9 @@ export async function doMergeConflictsExistOnCurrentBranch(): Promise<boolean> {
 	return true;
 }
 
+/**
+ * Get the package.json file path
+ */
 function getPackageJsonFilePath(): string {
 	return `${process.cwd()}/package.json`;
 }
@@ -134,6 +159,7 @@ function getPackageJsonFilePath(): string {
 /**
  * @async
  * Gets the version number from the package.json stored in the current directory (if it exists)
+ * @returns The version number in the package.json
  */
 export async function getPackageJsonVersion(): Promise<string> {
 	return new Promise((resolve, reject) => {
@@ -157,6 +183,7 @@ export async function getPackageJsonVersion(): Promise<string> {
  * Update the version number in the package.json file stored in the current directory (it if exists)
  * @param currentVersion The current version to search for
  * @param versionToUse The new version to update the file with
+ * @returns The package.json update result
  */
 export async function updatePackageJsonVersion(currentVersion: string, versionToUse: string): Promise<void> {
 	return new Promise((resolve, reject) => {
@@ -180,6 +207,7 @@ export async function updatePackageJsonVersion(currentVersion: string, versionTo
 
 /**
  * Get a "unique" filename to save progress files based on the current working directory (CWD)
+ * @returns A string of a unique filename
  */
 export function getFileNameSaveCwd(): string {
 	return process.cwd().replace(/[\\\/:]/g, '_');
@@ -198,14 +226,30 @@ export function touch(fileName: string): void {
 	}
 }
 
+/**
+ * Create a tag based on the version number supplied
+ * @param versionNumber The version number to base the tag off of
+ * @returns The tag name
+ */
 export function createReleaseTag(versionNumber: string): string {
 	return `v${versionNumber}`;
 }
 
-export function createReleaseBranchName(tag: string): string {
-	return `release/${tag}`;
+/**
+ * Create a release branch name
+ * @param branchName The branch name
+ * @returns The release branch name
+ */
+export function createReleaseBranchName(branchName: string): string {
+	return `release/${branchName}`;
 }
 
+/**
+ * Create a branch name that avoids collisions with other potential development branches
+ * @param targetBranch The target branch to pull code from
+ * @param developmentBranch The branch to merge the target code into
+ * @returns The development merge branch name
+ */
 export function createDevelopmentMergeBranchName(targetBranch: string, developmentBranch: string): string {
 	return `merge-banda/${targetBranch}-to-${developmentBranch}`;
 }
@@ -216,6 +260,7 @@ export function createDevelopmentMergeBranchName(targetBranch: string, developme
  * @param branch The branch to create
  * @param sourceBranch The branch name to create a branch off of
  * @param [deleteExisting=true] Whether to delete the branch if it already exists (default true)
+ * @returns Whether the branch was successfully created and checked out
  */
 export async function createAndCheckoutBranch(
 	branch: string,
@@ -245,6 +290,7 @@ export async function createAndCheckoutBranch(
  * @async
  * Merges a specified branch into whichever branch the user is currently on
  * @param branchToMerge The branch to merge into the current
+ * @returns The result of the merge command
  */
 export async function mergeBranch(branchToMerge: string): Promise<void> {
 	try {
@@ -258,6 +304,7 @@ export async function mergeBranch(branchToMerge: string): Promise<void> {
  * @async
  * Performs a commit of the currently pending changes
  * @param message The commit message
+ * @returns Whether the commit was successful
  */
 export async function commitToBranch(message: string): Promise<boolean> {
 	try {
@@ -273,6 +320,7 @@ export async function commitToBranch(message: string): Promise<boolean> {
  * @param remote Remote to push to
  * @param branchOrTag Branch to push to
  * @param [doSetUpstream=false] If the remote branch doesn't exist, then set the upstream (default false)
+ * @returns Whether the push was successful
  */
 export async function pushToRemote(
 	remote: string,
@@ -295,6 +343,7 @@ export async function pushToRemote(
  * Delete a branch from the remote
  * @param remote Remote to push to
  * @param branch Branch to delete
+ * @returns Whether the delete was successful
  */
 export async function deleteRemoteBranch(remote: string, branch: string): Promise<boolean> {
 	try {
@@ -309,6 +358,7 @@ export async function deleteRemoteBranch(remote: string, branch: string): Promis
  * Delete a branch from local
  * @param branch Branch to delete
  * @param [forceDelete=true] Whether to force the delete (default true)
+ * @returns Whether the local delete was successful
  */
 export async function deleteLocalBranch(branch: string, forceDelete: boolean = true): Promise<boolean> {
 	try {
@@ -323,6 +373,7 @@ export async function deleteLocalBranch(branch: string, forceDelete: boolean = t
  * Pull a remote branch to local
  * @param remote Remote to pull from
  * @param branch Branch to pull
+ * @returns Whether the pull was successful
  */
 export async function pullBranchFromRemote(remote: string, branch: string): Promise<boolean> {
 	try {
@@ -338,6 +389,7 @@ export async function pullBranchFromRemote(remote: string, branch: string): Prom
  * Create a tag on the current branch
  * @param tag The tag to use
  * @param message A message to accompany the tag commit
+ * @returns Whether the tag creation was successful
  */
 export async function createTag(tag: string, message: string): Promise<boolean> {
 	try {
