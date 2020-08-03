@@ -1,17 +1,39 @@
 import chalk from 'chalk';
 import fs from 'fs';
 import { prompt } from 'inquirer';
-import { execGitCmd } from 'run-git-command';
 import { Argv } from 'yargs';
-import { gitConfig } from '../utils/constants';
+import { semverRegex } from '../utils/constants';
 import {
-	checkForMergeConflictsOnCurrentBranch,
-	checkIfRemoteExists,
+	commitMessage,
+	ErrorMessage,
+	getErrorMessage,
+	getQuestion,
+	getStatusMessage,
+	Question,
+	StatusMessage,
+} from '../utils/messages';
+import {
+	checkoutBranch,
+	commitToBranch,
+	createAndCheckoutBranch,
 	createDevelopmentMergeBranchName,
 	createReleaseBranchName,
 	createReleaseTag,
+	createTag,
+	deleteLocalBranch,
+	deleteRemoteBranch,
+	doesRemoteExist,
+	doesTagExist,
+	doMergeConflictsExistOnCurrentBranch,
+	getCurrentBranch,
 	getFileNameSaveCwd,
 	getPackageJsonVersion,
+	isBranchCleanWhenUpdatedFromRemote,
+	isGitInstalled,
+	isWorkingDirectoryClean,
+	mergeBranch,
+	pullBranchFromRemote,
+	pushToRemote,
 	touch,
 	updatePackageJsonVersion,
 } from '../utils/utils';
@@ -41,7 +63,6 @@ const defaultRemote: string = 'origin';
 const defaultSourceBranch: string = 'develop';
 const defaultTargetBranch: string = 'master';
 const defaultDevelopmentBranch: string = 'develop';
-const semverRegex = /^\d+\.\d+\.\d+$/;
 let initialBranch: string;
 const progressFileDir = '/../../progress-files';
 const progressFile = {
@@ -64,6 +85,7 @@ const progressFile = {
 		return `${__dirname}${progressFileDir}/${getFileNameSaveCwd()}-development-merge.lock`;
 	},
 };
+const QUESTION_ANSWER_PROPERTY = 'answer';
 
 /**
  * Ensure the following prerequisites exist on the user's machine
@@ -72,21 +94,12 @@ const progressFile = {
  */
 async function checkPrerequisites(): Promise<string> {
 	// Check if git is installed
-	try {
-		await execGitCmd(['--version'], gitConfig);
-	} catch {
-		// Git is not installed
-		return Promise.reject('Git is not installed. Please install before continuing.');
+	if (!(await isGitInstalled())) {
+		return Promise.reject(getErrorMessage(ErrorMessage.GitNotInstalled));
 	}
 	// Ensure working directory is clean
-	try {
-		const data = (await execGitCmd(['status', '--porcelain'], gitConfig)) as string;
-		if (data) {
-			return Promise.reject('Working directory is not clean. Please stash or commit changes before continuing.');
-		}
-	} catch {
-		// Uncommitted changes
-		return Promise.reject('There was an error checking workspace cleanliness.');
+	if (!(await isWorkingDirectoryClean())) {
+		return Promise.reject(getErrorMessage(ErrorMessage.WorkspaceNotClean));
 	}
 	return Promise.resolve('');
 }
@@ -125,7 +138,7 @@ function loadUsersVariables(): void {
 }
 
 /**
- * If a user is re-starting a release, make sure these files are eliminated so the script doesn't skip an exeuction
+ * If a user is re-starting a release, make sure these files are eliminated so the script doesn't skip an execution
  */
 function resetDeploy(): void {
 	try {
@@ -161,32 +174,65 @@ function resetDeploy(): void {
 }
 
 /**
+ * Determines whether the previous process can be continued or not
+ */
+function canThePreviousProcessBeContinued() {
+	return fs.existsSync(progressFile.variableSaveFile);
+}
+
+/**
+ * @async
+ * Handle display and checking of a remote, with an optional second argument to check for a branch on remote
+ */
+async function checkIfRemoteExists(remote: string, branch?: string): Promise<string> {
+	// If no branch provided, just check the remote
+	if (!branch) {
+		process.stdout.write(getStatusMessage(StatusMessage.CheckRemote, remote));
+		if (await doesRemoteExist(remote)) {
+			console.log(getStatusMessage(StatusMessage.Confirmed));
+		} else {
+			console.log();
+			return Promise.reject(getErrorMessage(ErrorMessage.RemoteDoesNotExist, remote));
+		}
+	} else {
+		process.stdout.write(getStatusMessage(StatusMessage.CheckBranch, branch, remote));
+		// Confirm that this branch exists on remote
+		if (doesRemoteExist(remote, branch)) {
+			console.log(getStatusMessage(StatusMessage.Confirmed));
+		} else {
+			console.log();
+			return Promise.reject(getErrorMessage(ErrorMessage.BranchDoesNotExist, branch));
+		}
+	}
+	return Promise.resolve('');
+}
+
+/**
  * This function gets the following information from a user:
- * 		- remote to use
- * 		- the source branch
- * 		- the target branch
- * 		- the development branch (for a merge after target has been updated)
- * 		- the version to use for the release (defaults to what's in the source branch and will be used for tagging)
- * 		- the version to set for the development branch
+ * - Remote to use
+ * - The source branch
+ * - The target branch
+ * - The development branch (for a merge after target has been updated)
+ * - The version to use for the release (defaults to what's in the source branch and will be used for tagging)
+ * - The version to set for the development branch
  * The function confirms the remotes and entered branches already exist on the remote and errors out, if they don't.
  * The function also enforces a semver convention. If everything succeeds, the variables are saved to a conf file.
  */
 async function getVariables(): Promise<string> {
-	// If variables are already in the conf file, it means the script didn't complete
 	// Ask the user if they want to continue from the previous execution
-	if (fs.existsSync(progressFile.variableSaveFile)) {
-		const shouldContinue = (
+	if (canThePreviousProcessBeContinued()) {
+		const userWantsToContinuePreviousProcess = (
 			await prompt([
 				{
 					type: 'confirm',
-					name: 'answer',
-					message: 'The previous process did not complete - continue it?',
+					name: QUESTION_ANSWER_PROPERTY,
+					message: getQuestion(Question.ContinuePreviousProcess),
 					default: true,
 				},
 			])
-		)['answer'] as boolean;
-		if (shouldContinue) {
-			console.log('Resuming...');
+		)[QUESTION_ANSWER_PROPERTY] as boolean;
+		if (userWantsToContinuePreviousProcess) {
+			console.log(getStatusMessage(StatusMessage.Resuming));
 			loadUsersVariables();
 			return Promise.resolve('');
 		}
@@ -198,28 +244,29 @@ async function getVariables(): Promise<string> {
 		await prompt([
 			{
 				type: 'input',
-				name: 'answer',
-				message: 'Git Remote to use:',
+				name: QUESTION_ANSWER_PROPERTY,
+				message: getQuestion(Question.GitRemoteToUse),
 				default: defaultRemote,
 			},
 		])
-	)['answer'];
+	)[QUESTION_ANSWER_PROPERTY];
 	await checkIfRemoteExists(remote);
 
 	// Get the source branch to suggest
-	initialBranch = ((await execGitCmd(['branch', '--show-current'], gitConfig)) as string).trim();
-	let sourceBranchToSuggest = initialBranch === defaultTargetBranch ? defaultSourceBranch : initialBranch;
+	initialBranch = await getCurrentBranch();
+	let sourceBranchToSuggest =
+		initialBranch === defaultTargetBranch || !initialBranch ? defaultSourceBranch : initialBranch;
 	// Confirm source branch (default the branch they're on, unless it's master)
 	sourceBranch = (
 		await prompt([
 			{
 				type: 'input',
-				name: 'answer',
-				message: 'Source branch to use:',
+				name: QUESTION_ANSWER_PROPERTY,
+				message: getQuestion(Question.SourceBranchToUse),
 				default: sourceBranchToSuggest,
 			},
 		])
-	)['answer'];
+	)[QUESTION_ANSWER_PROPERTY];
 	await checkIfRemoteExists(remote, sourceBranch);
 
 	// Confirm target branch (default master)
@@ -227,14 +274,14 @@ async function getVariables(): Promise<string> {
 		await prompt([
 			{
 				type: 'input',
-				name: 'answer',
-				message: 'Target branch to use:',
+				name: QUESTION_ANSWER_PROPERTY,
+				message: getQuestion(Question.TargetBranchToUse),
 				default: defaultTargetBranch,
 			},
 		])
-	)['answer'];
+	)[QUESTION_ANSWER_PROPERTY];
 	if (targetBranch === sourceBranch) {
-		return Promise.reject('Target branch must be different than source branch.');
+		return Promise.reject(getErrorMessage(ErrorMessage.TargetAndSourceBranchesMustDiffer));
 	}
 	await checkIfRemoteExists(remote, targetBranch);
 
@@ -243,84 +290,73 @@ async function getVariables(): Promise<string> {
 		await prompt([
 			{
 				type: 'input',
-				name: 'answer',
-				message: 'Development branch to use:',
+				name: QUESTION_ANSWER_PROPERTY,
+				message: getQuestion(Question.DevelopmentBranchToUse),
 				default: defaultDevelopmentBranch,
 			},
 		])
-	)['answer'];
+	)[QUESTION_ANSWER_PROPERTY];
 	if (developmentBranch === targetBranch) {
-		return Promise.reject('Development branch must be different then target branch.');
+		return Promise.reject(getErrorMessage(ErrorMessage.DevelopmentAndTargetBranchesMustDiffer));
 	}
 
 	// Only check if this branch exists if we haven't already checked for it
 	if (developmentBranch === sourceBranch) {
-		console.log(`Already confirmed that branch '${developmentBranch}' exists.`);
+		console.log(getStatusMessage(StatusMessage.AlreadyConfirmedBranchExists, developmentBranch));
 	} else {
 		await checkIfRemoteExists(remote, developmentBranch);
 	}
 
 	// Check out the target branch so we can get that version
-	process.stdout.write(`Fetching target branch '${targetBranch}'...`);
-	await execGitCmd(['checkout', targetBranch], gitConfig);
-	// See if we get any merge conflicts
-	try {
-		await execGitCmd(['pull', remote, targetBranch], gitConfig);
-		await checkForMergeConflictsOnCurrentBranch();
-		console.log(chalk.green('done'));
-	} catch {
-		console.log();
-		return Promise.reject(
-			`There were merge conflicts when pulling from remote on branch '${targetBranch}'. Please fix and restart the process.`,
-		);
+	process.stdout.write(getStatusMessage(StatusMessage.FetchingTargetBranch, targetBranch));
+	if (!(await checkoutBranch(targetBranch))) {
+		return Promise.reject(getErrorMessage(ErrorMessage.CouldNotCheckOutBranch, targetBranch));
 	}
+	// See if we get any merge conflicts
+	if (!isBranchCleanWhenUpdatedFromRemote(remote, targetBranch)) {
+		console.log();
+		return Promise.reject(getErrorMessage(ErrorMessage.MergeConflictsOnPullToFix, targetBranch));
+	}
+	console.log(getStatusMessage(StatusMessage.Done));
 
 	// Get the current app version
 	const targetPackageVersion = await getPackageJsonVersion();
 
 	// Check out the source branch so we can get that version
-	process.stdout.write(`Fetching source branch '${sourceBranch}'...`);
-	await execGitCmd(['checkout', sourceBranch], gitConfig);
-	// Make sure no merge conflicts exist
-	try {
-		await execGitCmd(['pull', remote, sourceBranch], gitConfig);
-		await checkForMergeConflictsOnCurrentBranch();
-		console.log(chalk.green('done'));
-	} catch {
-		console.log();
-		return Promise.reject(
-			`There were merge conflicts when pulling from remote on branch '${sourceBranch}'. Please fix and restart the process.`,
-		);
+	process.stdout.write(getStatusMessage(StatusMessage.FetchingSourceBranch, sourceBranch));
+	if (!(await checkoutBranch(sourceBranch))) {
+		return Promise.reject(getErrorMessage(ErrorMessage.CouldNotCheckOutBranch, sourceBranch));
 	}
+	// Make sure no merge conflicts exist
+	if (!isBranchCleanWhenUpdatedFromRemote(remote, sourceBranch)) {
+		return Promise.reject(getErrorMessage(ErrorMessage.MergeConflictsOnPullToFix, sourceBranch));
+	}
+	console.log(getStatusMessage(StatusMessage.Done));
 
 	// Get the current app version
 	const sourcePackageVersion = await getPackageJsonVersion();
 
 	// Ask the user what version they want to use
-	console.log(`Source version: ${sourcePackageVersion}, Target version: ${targetPackageVersion}`);
+	console.log(getStatusMessage(StatusMessage.SourceAndTargetVersion, sourcePackageVersion, targetPackageVersion));
 	const packageQuestion = {
 		type: 'input',
-		name: 'answer',
-		message: 'Version number for this release:',
+		name: QUESTION_ANSWER_PROPERTY,
+		message: getQuestion(Question.VersionNumberToUse),
 		default: sourcePackageVersion,
 	};
 	while (!packageVersion || !semverRegex.test(packageVersion)) {
 		if (packageVersion) {
-			console.log(chalk.red(`Version '${packageVersion}' is not in the correct format of #.#.#. Please enter again.`));
+			console.log(getErrorMessage(ErrorMessage.VersionFormatWrong, packageVersion));
 		}
-		packageVersion = (await prompt([packageQuestion]))['answer'];
+		packageVersion = (await prompt([packageQuestion]))[QUESTION_ANSWER_PROPERTY];
 	}
 
 	tag = createReleaseTag(packageVersion);
-	process.stdout.write('Checking tag uniqueness...');
-	await execGitCmd(['fetch', '--all', '--tags', '--force'], gitConfig);
-	// Check if the tag exists and, if it does, abort
-	const foundTag = (await execGitCmd(['tag', '-l', tag], gitConfig)) as string;
-	if (foundTag) {
-		console.log();
-		return Promise.reject(`Tag ${tag} already exists. Delete it or select a new app version before continuing.`);
+	process.stdout.write(getStatusMessage(StatusMessage.CheckingTagUniqueness));
+	if (await doesTagExist(tag)) {
+		return Promise.reject(getErrorMessage(ErrorMessage.TagExists, tag));
 	}
-	console.log(chalk.green('confirmed'));
+	console.log(getStatusMessage(StatusMessage.Confirmed));
 
 	// Get the next version to suggest
 	// First, get the major version
@@ -329,18 +365,16 @@ async function getVariables(): Promise<string> {
 	suggestedNextPackageVersion += `.${parseInt(packageVersion.replace(/^\d+\./, ''), 10) + 1}.0`;
 	const nextPackageQuestion = {
 		type: 'input',
-		name: 'answer',
-		message: `Next app verion to use in development branch '${developmentBranch}':`,
+		name: QUESTION_ANSWER_PROPERTY,
+		message: getQuestion(Question.NextVersionToUse, developmentBranch),
 		default: suggestedNextPackageVersion,
 	};
 	// Have a loop to make sure the version gets entered in the correct format
 	while (!nextPackageVersion || !semverRegex.test(nextPackageVersion)) {
 		if (nextPackageVersion) {
-			console.log(
-				chalk.red(`Version '${nextPackageVersion}' is not in the correct format of #.#.#. Please enter again.`),
-			);
+			console.log(getErrorMessage(ErrorMessage.VersionFormatWrong, nextPackageVersion));
 		}
-		nextPackageVersion = (await prompt([nextPackageQuestion]))['answer'];
+		nextPackageVersion = (await prompt([nextPackageQuestion]))[QUESTION_ANSWER_PROPERTY];
 	}
 
 	// If we've made it here, we can save these variables to a file in case the process fails and needs to be restarted
@@ -351,33 +385,33 @@ async function getVariables(): Promise<string> {
 
 /**
  * This function does all the work, which includes the following:
- * 		1. Check out target and create a release branch to do work.
- * 		2. Merge source to release branch.
- * 			a. If merge conflicts exist, have the user fix them and then resume the process.
- * 			b. Exit execution.
- * 		3. Update the app version, if necessary.
- * 		4. Merge the release branch to the target.
- * 		5. Push the target to remote.
- * 			a. If an error occurs (probably because they don't have write access), push the release branch to remote.
- * 			b. Tell the user to have someone merge the pushed release branch, then resume this process.
- * 			c. Exit execution.
- * 		6. Create a tag on the target branch.
- * 		7. Push the tag.
- * 			a. If an error occurs (probably because the user doesn't have tag write access), tell them to get permission and resume this process.
- * 			b. Exit execution.
- * 		8. Check out development branch.
- * 		9. Get latest changes from remote on development branch.
- * 			a. If merge conflicts exist, have the user fix them and then resume the process.
- * 			b. Exit execution.
- * 		10. Create a merge branch off the development branch.
- * 		11. Merge changes from target branch.
- * 			a. If merge conflicts exist, have the user fix them and then resume the process.
- * 			b. Exit execution.
- * 		12. Update the app version with the next version the user entered.
- * 		13. Merge the temporary merge branch back into the development branch.
- * 		14. Push the changes.
- * 			a. If an error occurs (probably because they don't have write access), push the temporary merge branch to remote.
- * 			b. Tell the user to have someone merge the pushed branch, but don't error out of the process
+ * 1. Check out target and create a release branch to do work.
+ * 1. Merge source to release branch.
+ * 	1. If merge conflicts exist, have the user fix them and then resume the process.
+ * 	2. Exit execution.
+ * 3. Update the app version, if necessary.
+ * 4. Merge the release branch to the target.
+ * 5. Push the target to remote.
+ * 	1. If an error occurs (probably because they don't have write access), push the release branch to remote.
+ * 	2. Tell the user to have someone merge the pushed release branch, then resume this process.
+ * 	3. Exit execution.
+ * 6. Create a tag on the target branch.
+ * 7. Push the tag.
+ * 	1. If an error occurs (probably because the user doesn't have tag write access), tell them to get permission and resume this process.
+ * 	2. Exit execution.
+ * 8. Check out development branch.
+ * 9. Get latest changes from remote on development branch.
+ * 	1. If merge conflicts exist, have the user fix them and then resume the process.
+ * 	2. Exit execution.
+ * 10. Create a merge branch off the development branch.
+ * 11. Merge changes from target branch.
+ * 	1. If merge conflicts exist, have the user fix them and then resume the process.
+ * 	2. Exit execution.
+ * 12. Update the app version with the next version the user entered.
+ * 13. Merge the temporary merge branch back into the development branch.
+ * 14. Push the changes.
+ * 	1. If an error occurs (probably because they don't have write access), push the temporary merge branch to remote.
+ * 	2. Tell the user to have someone merge the pushed branch, but don't error out of the process
  */
 async function run(): Promise<string> {
 	// Branch to release branch (branch release-{tag})
@@ -400,29 +434,22 @@ async function run(): Promise<string> {
 				if (targetMergeLockFileIsMissing) {
 					// If the source to target lock file exists, skip this section to resume where the process left off
 					if (sourceMergeLockFileIsMissing) {
-						console.log(`Creating release branch '${releaseBranch}' off target '${targetBranch}'`);
-						await execGitCmd(['checkout', targetBranch], gitConfig);
-						// Delete any branch that might be there
-						try {
-							await execGitCmd(['branch', '-D', releaseBranch], gitConfig);
-						} catch {}
-						await execGitCmd(['checkout', '-b', releaseBranch], gitConfig);
+						console.log(getStatusMessage(StatusMessage.CreatingReleaseBranch, releaseBranch, targetBranch));
+						if (!(await createAndCheckoutBranch(releaseBranch, targetBranch))) {
+							return Promise.reject(getErrorMessage(ErrorMessage.CouldNotCreateBranch, releaseBranch));
+						}
 
 						// Merge source to release branch
-						console.log(`Merging '${sourceBranch}' -> '${releaseBranch}'`);
+						console.log(getStatusMessage(StatusMessage.Merge, sourceBranch, releaseBranch));
 						try {
-							await execGitCmd(['merge', '--no-ff', sourceBranch], gitConfig);
+							await mergeBranch(sourceBranch);
 						} catch (e) {
 							// There was an error, most likely a merge conflict
 							// Confirm the merge conflict
-							try {
-								await checkForMergeConflictsOnCurrentBranch();
-							} catch {
+							if (await doMergeConflictsExistOnCurrentBranch()) {
 								// Yep, there was a merge conflict
 								touch(progressFile.sourceMergeLockFile);
-								return Promise.reject(
-									`There are merge conflicts between the source and release branches. Please fix the conflicts, commit them to branch '${releaseBranch}', and resume the process.`,
-								);
+								return Promise.reject(getErrorMessage(ErrorMessage.FixReleaseBranchMergeConflicts, releaseBranch));
 							}
 							// Otherwise, an error occurred that wasn't related to merging
 							return Promise.reject(e);
@@ -435,87 +462,92 @@ async function run(): Promise<string> {
 					}
 
 					// Update version number in appropriate file, if necessary
-					await execGitCmd(['checkout', releaseBranch], gitConfig);
+					if (!(await checkoutBranch(releaseBranch))) {
+						// TODO: do anything here?
+						// return Promise.reject(getErrorMessage(ErrorMessage.CouldNotCheckOutBranch, releaseBranch));
+					}
 					const currentPackageVersion = await getPackageJsonVersion();
 					if (currentPackageVersion !== packageVersion) {
 						process.stdout.write(
-							`Updating and commiting the new package version '${packageVersion}' in release branch '${releaseBranch}'...`,
+							getStatusMessage(StatusMessage.ReleaseBranchPackageVersionUpdate, packageVersion, releaseBranch),
 						);
 						await updatePackageJsonVersion(currentPackageVersion, packageVersion);
 
 						// Commit changes to release branch
-						await execGitCmd(['commit', '-am', '"updating app version"'], gitConfig);
-						console.log(chalk.green('done'));
+						if (!(await commitToBranch(commitMessage.UPDATE_APP_VERSION))) {
+							// TODO: do anything here?
+						}
+						console.log(getStatusMessage(StatusMessage.Done));
 					} else {
-						console.log('No need to update package version. Skipping.');
+						console.log(getStatusMessage(StatusMessage.NoPackageUpdateNeeded));
 					}
 
 					// Merge release to target
-					console.log(`Merging '${releaseBranch}' -> '${targetBranch}'`);
-					await execGitCmd(['checkout', targetBranch], gitConfig);
-					await execGitCmd(['merge', '--no-ff', releaseBranch], gitConfig);
+					console.log(getStatusMessage(StatusMessage.Merge, releaseBranch, targetBranch));
+					if (!(await checkoutBranch(targetBranch))) {
+						// TODO: do anything here?
+					}
+					try {
+						await mergeBranch(releaseBranch);
+					} catch {}
 
 					// Push the new target branch
-					process.stdout.write(`Pushing '${targetBranch}' to remote...`);
-					try {
-						await execGitCmd(['push', remote, targetBranch], gitConfig);
-					} catch {
+					process.stdout.write(getStatusMessage(StatusMessage.PushingToRemote, targetBranch));
+					if (!(await pushToRemote(remote, targetBranch))) {
 						// If there was an error with the previous command, it (probably) means they don't have permission to write to this branch
 						// Since they can't push to the target branch, push the release and say they need to have someone else merge it
 						console.log();
-						console.log(
-							chalk.red(
-								`You do not have permission to write to '${targetBranch}'. Pushing '${releaseBranch}' to remote`,
-							),
-						);
-						await execGitCmd(['checkout', releaseBranch], gitConfig);
-						process.stdout.write(`Pushing '${releaseBranch}' to remote...`);
-						await execGitCmd(['push', '-u', remote, releaseBranch], gitConfig);
-						console.log(chalk.green('done'));
+						console.log(getErrorMessage(ErrorMessage.CannotPushBranch, targetBranch, releaseBranch));
+						if (!(await checkoutBranch(releaseBranch))) {
+							// TODO: do anything here?
+						}
+						process.stdout.write(getStatusMessage(StatusMessage.PushingToRemote, releaseBranch));
+						if (!(await pushToRemote(remote, releaseBranch, true))) {
+							// TODO: do anything here?
+						}
+						console.log(getStatusMessage(StatusMessage.Done));
 						touch(progressFile.targetMergeLockFile);
-						return Promise.reject(`Please have someone merge '${releaseBranch} for you, then continue this process.`);
+						return Promise.reject(getErrorMessage(ErrorMessage.HaveSomeoneMerge, releaseBranch));
 					}
-					console.log(chalk.green('done'));
+					console.log(getStatusMessage(StatusMessage.Done));
 				} else {
 					// We're assuming the release branch has been merged...
-					console.log(`Assuming '${releaseBranch}' has been merged to '${targetBranch}'`);
+					console.log(getStatusMessage(StatusMessage.AssumingBranchMerged, releaseBranch, targetBranch));
 					// Remove the lock file since it's not needed anymore
 					try {
 						fs.unlinkSync(progressFile.targetMergeLockFile);
 					} catch {}
 					// Delete remote release branch
-					await execGitCmd(['push', remote, '-d', releaseBranch], gitConfig);
+					if (!(await deleteRemoteBranch(remote, releaseBranch))) {
+						// TODO: do anything here?
+					}
 				}
 
 				// Remove the local release branch (one would only be at the remote if we failed previously)
-				try {
-					await execGitCmd(['branch', '-D', releaseBranch], gitConfig);
-				} catch {}
+				await deleteLocalBranch(releaseBranch);
 
 				// Create tag at merged commit
-				process.stdout.write(`Fetching '${targetBranch}' from remote...`);
-				await execGitCmd(['checkout', targetBranch], gitConfig);
-				await execGitCmd(['pull', remote, targetBranch], gitConfig);
-				console.log(chalk.green('done'));
-				console.log(`Creating release tag '${tag}' in target '${targetBranch}'`);
-				await execGitCmd(['tag', '-a', tag, '-m', `"Merging branch '${releaseBranch}'"`], gitConfig);
+				process.stdout.write(getStatusMessage(StatusMessage.FetchingBranchFromRemote, targetBranch));
+				await checkoutBranch(targetBranch);
+				await pullBranchFromRemote(remote, targetBranch);
+				console.log(getStatusMessage(StatusMessage.Done));
+				console.log(getStatusMessage(StatusMessage.CreatingTag, tag, targetBranch));
+				await createTag(tag, `Merging branch '${releaseBranch}'`);
 			} else {
 				try {
 					fs.unlinkSync(progressFile.taggingLockFile);
 				} catch {}
 			}
 
-			await execGitCmd(['checkout', targetBranch], gitConfig);
+			await checkoutBranch(targetBranch);
 			// Push tag
-			process.stdout.write(`Pushing tag '${tag}' to remote...`);
-			try {
-				await execGitCmd(['push', remote, tag], gitConfig);
-			} catch {
+			process.stdout.write(getStatusMessage(StatusMessage.PushingTagToRemote, tag));
+			if (!(await pushToRemote(remote, tag))) {
 				// If there was an error, we have to wait again
 				touch(progressFile.taggingLockFile);
-				return Promise.reject('You do not have permission to push tags. Get permission, then resume this process.');
+				return Promise.reject(getErrorMessage(ErrorMessage.CannotPushTags));
 			}
-			console.log(chalk.green('done'));
+			console.log(getStatusMessage(StatusMessage.Done));
 		} else {
 			try {
 				fs.unlinkSync(progressFile.developmentPullMergeLockFile);
@@ -523,38 +555,29 @@ async function run(): Promise<string> {
 		}
 
 		// Checkout development branch
-		process.stdout.write(`Fetching development branch '${developmentBranch}'...`);
-		await execGitCmd(['checkout', developmentBranch], gitConfig);
+		process.stdout.write(getStatusMessage(StatusMessage.FetchingDevelopmentBranch, developmentBranch));
+		await checkoutBranch(developmentBranch);
 		// See if we get any merge conflicts
-		try {
-			await execGitCmd(['pull', remote, developmentBranch], gitConfig);
-		} catch (e) {
+		if (!(await pullBranchFromRemote(remote, developmentBranch))) {
 			// See if there were any merge conflicts
-			try {
-				await checkForMergeConflictsOnCurrentBranch();
-			} catch {
+			if (await doMergeConflictsExistOnCurrentBranch()) {
 				// Yep, there were merge conflicts
 				console.log();
 				touch(progressFile.developmentPullMergeLockFile);
-				return Promise.reject(
-					'There were merge conflicts when pulling from remote. Please fix and resume the process.',
-				);
+				return Promise.reject(getErrorMessage(ErrorMessage.MergeConflictsOnPull));
 			}
-			// Otherwise, an error occured when pulling
+			// Otherwise, an error occurred when pulling
 			touch(progressFile.developmentPullMergeLockFile);
-			return Promise.reject(e);
+			return Promise.reject(getErrorMessage(ErrorMessage.ErrorOnPull, developmentBranch));
 		}
-		console.log(chalk.green('done'));
+		console.log(getStatusMessage(StatusMessage.Done));
 
 		// Merge target branch to development branch
 		process.stdout.write(
-			`Creating temporary merge branch '${developmentMergeBranch}' off development branch '${developmentBranch}'...`,
+			getStatusMessage(StatusMessage.CreatingTemporaryMergeBranch, developmentMergeBranch, developmentBranch),
 		);
-		try {
-			await execGitCmd(['branch', '-D', developmentMergeBranch], gitConfig);
-		} catch {}
-		await execGitCmd(['checkout', '-b', developmentMergeBranch], gitConfig);
-		console.log(chalk.green('done'));
+		await createAndCheckoutBranch(developmentMergeBranch, developmentBranch);
+		console.log(getStatusMessage(StatusMessage.Done));
 	} else {
 		try {
 			fs.unlinkSync(progressFile.developmentMergeLockFile);
@@ -562,18 +585,16 @@ async function run(): Promise<string> {
 	}
 
 	// Make sure there aren't any merge conflicts
-	await execGitCmd(['checkout', developmentMergeBranch], gitConfig);
-	console.log(`Merging '${targetBranch}' -> '${developmentMergeBranch}'`);
+	await checkoutBranch(developmentMergeBranch);
+	console.log(getStatusMessage(StatusMessage.Merge, targetBranch, developmentMergeBranch));
 	try {
-		await execGitCmd(['merge', '--no-ff', targetBranch], gitConfig);
+		await mergeBranch(targetBranch);
 	} catch (e) {
 		// See if there were any merge conflicts
-		try {
-			await checkForMergeConflictsOnCurrentBranch();
-		} catch {
+		if (await doMergeConflictsExistOnCurrentBranch()) {
 			// Yep, there were merge conflicts
 			touch(progressFile.developmentMergeLockFile);
-			return Promise.reject('There were merge conflicts when merging. Please fix and resume the process.');
+			return Promise.reject(getErrorMessage(ErrorMessage.MergeConflictsOnMerge));
 		}
 		touch(progressFile.developmentMergeLockFile);
 		return Promise.reject(e);
@@ -583,43 +604,41 @@ async function run(): Promise<string> {
 	const currentPackageVersion = await getPackageJsonVersion();
 	if (currentPackageVersion !== nextPackageVersion) {
 		process.stdout.write(
-			`Updating and commiting the new package version '${nextPackageVersion}' in branch '${developmentMergeBranch}'...`,
+			getStatusMessage(StatusMessage.BranchPackageVersionUpdate, nextPackageVersion, developmentMergeBranch),
 		);
 		await updatePackageJsonVersion(currentPackageVersion, nextPackageVersion);
 
 		// Commit changes to development merge branch
-		await execGitCmd(['commit', '-am', '"updating app version"'], gitConfig);
-		console.log(chalk.green('done'));
+		await commitToBranch(commitMessage.UPDATE_APP_VERSION);
+		console.log(getStatusMessage(StatusMessage.Done));
 	} else {
-		console.log('No need to update package version. Skipping.');
+		console.log(getStatusMessage(StatusMessage.NoPackageUpdateNeeded));
 	}
 
 	// Merge to development branch and push
-	console.log(`Merging '${developmentMergeBranch}' -> '${developmentBranch}'`);
-	await execGitCmd(['checkout', developmentBranch], gitConfig);
-	await execGitCmd(['merge', '--no-ff', developmentMergeBranch], gitConfig);
-
-	process.stdout.write(`Pushing '${developmentBranch}' to remote...`);
+	console.log(getStatusMessage(StatusMessage.Merge, developmentMergeBranch, developmentBranch));
+	await checkoutBranch(developmentBranch);
 	try {
-		await execGitCmd(['push', remote, developmentBranch], gitConfig);
-		console.log(chalk.green('done'));
-		console.log(`Removing temporary merge branch '${developmentMergeBranch}'.`);
-		await execGitCmd(['branch', '-d', developmentMergeBranch], gitConfig);
+		await mergeBranch(developmentMergeBranch);
+	} catch {}
+
+	process.stdout.write(getStatusMessage(StatusMessage.PushingToRemote, developmentBranch));
+	try {
+		await pushToRemote(remote, developmentBranch, false);
+		console.log(getStatusMessage(StatusMessage.Done));
+		console.log(getStatusMessage(StatusMessage.RemovingTemporaryMergeBranch, developmentMergeBranch));
+		await deleteLocalBranch(developmentMergeBranch, false);
 	} catch {
 		// If there was an error with the previous command, it (probably) means they don't have permission to write to this branch
 		// Since they can't push to the target branch, push the release and say they need to have someone else merge it
-		console.log(
-			chalk.red(
-				`You do not have permission to write to '${developmentBranch}'. Pushing '${developmentMergeBranch}' to remote - please have someone merge it for you to finish this process.`,
-			),
-		);
-		await execGitCmd(['checkout', developmentMergeBranch], gitConfig);
-		process.stdout.write(`Pushing '${developmentMergeBranch}' to remote...`);
-		await execGitCmd(['push', '-u', remote, developmentMergeBranch], gitConfig);
-		console.log(chalk.green('done'));
-		console.log(`Removing temporary merge branch '${developmentMergeBranch}' locally.`);
-		await execGitCmd(['branch', '-D', developmentMergeBranch], gitConfig);
-		console.log(chalk.yellow(`Please have someone merge '${developmentMergeBranch} for you to finish this process.`));
+		console.log(getErrorMessage(ErrorMessage.CannotPushBranchToFinish, developmentBranch, developmentMergeBranch));
+		await checkoutBranch(developmentMergeBranch);
+		process.stdout.write(getStatusMessage(StatusMessage.PushingToRemote, developmentMergeBranch));
+		await pushToRemote(remote, developmentMergeBranch, true);
+		console.log(getStatusMessage(StatusMessage.Done));
+		console.log(getStatusMessage(StatusMessage.RemovingTemporaryMergeBranchLocally, developmentMergeBranch));
+		await deleteLocalBranch(developmentMergeBranch);
+		console.log(getStatusMessage(StatusMessage.MergeOnRemoteToFinish, developmentMergeBranch));
 	}
 	return Promise.resolve('');
 }
@@ -632,9 +651,9 @@ async function finish() {
 	resetDeploy();
 
 	// Check out original branch user was on
-	await execGitCmd(['checkout', initialBranch || developmentBranch], gitConfig);
+	await checkoutBranch(initialBranch || developmentBranch);
 
-	console.log(chalk.green('Finished!'));
+	console.log(getStatusMessage(StatusMessage.Finished));
 }
 
 async function main(argv): Promise<void> {
@@ -644,6 +663,7 @@ async function main(argv): Promise<void> {
 		await run();
 		await finish();
 	} catch (e) {
+		console.log();
 		console.log(chalk.red(e));
 	}
 	// if (argv.verbose) console.info(`start server on :${argv.port}`);
