@@ -8,7 +8,7 @@ import {
 	StatusMessage,
 } from '../utils/messages';
 import * as utils from '../utils/utils';
-import { handler, UsersVariables } from './deploy';
+import { handler, resetState, UsersVariables } from './deploy';
 
 jest.mock('fs');
 jest.mock('inquirer');
@@ -29,6 +29,7 @@ const version = {
 	TARGET: '1.4.5',
 	USE: '1.4.6',
 	NEXT: '1.5.0',
+	INVALID: '1.4.6-SNAPSHOT',
 };
 const TAG = `v${version.USE}`;
 const TEST_CWD = 'test/directory';
@@ -57,6 +58,8 @@ describe('deploy', () => {
 
 	afterEach(() => {
 		loggedOutput.length = 0;
+		require('fs').__clearData();
+		resetState();
 	});
 
 	const setupSuccessfulVariableInput = (shouldAppendResumeAnswer: boolean = false): void => {
@@ -163,6 +166,7 @@ describe('deploy', () => {
 			} catch {}
 			confirmTestExitedAfterRunVariableInput();
 			loggedOutput.length = 0;
+			(inquirer as any).prompt.mockReturnValueOnce({ answer: true });
 			try {
 				await handler({});
 			} catch {}
@@ -182,10 +186,20 @@ describe('deploy', () => {
 			try {
 				await handler({});
 			} catch {}
-			confirmTestExitedAfterRunVariableInput();//check
+			confirmTestExitedAfterRunVariableInput(); //check
 			expect(loggedOutput.some((loggedValue) => loggedValue === resumingMessage)).toBe(false);
 		});
-		it('a connection break errors out the process', async () => {});
+		it('a connection break errors out the process', async () => {
+			setupSuccessfulVariableInput();
+			// Any connection break will simply cause this method to return false
+			mockedUtils.doesRemoteExist = jest.fn().mockReturnValue(Promise.resolve(false));
+			try {
+				await handler({});
+				expect(true).toBe(false);
+			} catch {
+				expect(loggedOutput[loggedOutput.length - 1]).toBe(getErrorMessage(ErrorMessage.RemoteDoesNotExist, REMOTE));
+			}
+		});
 		it('if the same source and target branches are selected, a rejected promise is returned', async () => {
 			(inquirer as any).prompt = jest
 				.fn()
@@ -215,6 +229,29 @@ describe('deploy', () => {
 				expect(true).toBe(true);
 			}
 		});
+		it('asks the continuously until a valid package version is entered', async () => {
+			setupSuccessfulVariableInput();
+			configureToOnlyRunVariableInput();
+			(inquirer as any).prompt = jest
+				.fn()
+				.mockReturnValueOnce({ answer: REMOTE })
+				.mockReturnValueOnce({ answer: branch.SOURCE })
+				.mockReturnValueOnce({ answer: branch.TARGET })
+				.mockReturnValueOnce({ answer: branch.DEVELOPMENT })
+				.mockReturnValueOnce({ answer: version.INVALID })
+				.mockReturnValueOnce({ answer: version.INVALID })
+				.mockReturnValueOnce({ answer: version.INVALID })
+				.mockReturnValueOnce({ answer: version.USE })
+				.mockReturnValueOnce({ answer: version.NEXT });
+			try {
+				await handler({});
+				expect(true).toBe(false);
+			} catch {
+				confirmTestExitedAfterRunVariableInput();
+				const wrongPackageMessage = getErrorMessage(ErrorMessage.VersionFormatWrong, version.INVALID);
+				expect(loggedOutput.filter((loggedValue) => loggedValue === wrongPackageMessage)).toHaveLength(3);
+			}
+		});
 		it('asks the user for all inputs and saves them', async () => {
 			setupSuccessfulVariableInput();
 			configureToOnlyRunVariableInput();
@@ -240,12 +277,21 @@ describe('deploy', () => {
 			setupSuccessfulVariableInput();
 			try {
 				await handler({});
-				expect(true).toBe(true);
+				expect(loggedOutput[loggedOutput.length - 1]).toBe(getStatusMessage(StatusMessage.Finished));
 			} catch {
 				expect(true).toBe(false);
 			}
 		});
-		it(`doesn't try to update version numbers if there isn't a change`, async () => {});
+		it(`doesn't try to update version numbers if there isn't a change`, async () => {
+			setupSuccessfulVariableInput();
+			const targetUpdateLog = getStatusMessage(StatusMessage.BranchPackageVersionUpdate, version.TARGET, version.USE);
+			try {
+				await handler({});
+				expect(loggedOutput.some((loggedValue) => loggedValue === targetUpdateLog)).toBe(false);
+			} catch {
+				expect(true).toBe(false);
+			}
+		});
 		it(`exits the process if there are merge conflicts when merging to target from source and allows a user to resume upon re-run`, async () => {});
 		it(`exits the process if the user doesn't have rights to push to target branch`, async () => {});
 		it(`exits the process if the user can't push tags to the target branch`, async () => {});

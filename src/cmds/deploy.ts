@@ -88,6 +88,19 @@ const progressFile = {
 const QUESTION_ANSWER_PROPERTY = 'answer';
 
 /**
+ * Reset this module's state (mainly used in testing)
+ */
+export function resetState() {
+	remote = null;
+	sourceBranch = null;
+	targetBranch = null;
+	developmentBranch = null;
+	packageVersion = null;
+	nextPackageVersion = null;
+	tag = null;
+}
+
+/**
  * Ensure the following prerequisites exist on the user's machine
  * 		1. Git is installed
  * 		2. The user's working directory in Git is clean
