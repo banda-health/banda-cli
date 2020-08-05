@@ -1,7 +1,7 @@
 {
 	"name": "banda-cli",
 	"version": "1.0.0",
-	"description": "A CLI to help with Banda needs",
+	"description": "A CLI to help with all your Banda needs",
 	"main": "build/cli.js",
 	"bin": {
 		"@kwburnett/banda": "bin/cli",

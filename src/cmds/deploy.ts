@@ -209,12 +209,19 @@ function logStatus(
 	withNewLine: boolean = true,
 	...additionalMessageParameters: string[]
 ) {
-	const logMethod = withNewLine ? console.log : process.stdout.write;
-	if (typeof logMessage === 'string') {
-		logMethod(logMessage);
-		return;
+	if (withNewLine) {
+		if (typeof logMessage === 'string') {
+			console.log(logMessage);
+			return;
+		}
+		console.log(getStatusMessage(logMessage, ...additionalMessageParameters));
+	} else {
+		if (typeof logMessage === 'string') {
+			process.stdout.write(logMessage);
+			return;
+		}
+		process.stdout.write(getStatusMessage(logMessage, ...additionalMessageParameters));
 	}
-	logMethod(getStatusMessage(logMessage, ...additionalMessageParameters));
 }
 
 /**
@@ -242,7 +249,7 @@ async function checkIfRemoteExists(remote: string, branch?: string): Promise<str
 	} else {
 		logStatus(StatusMessage.CheckBranch, false, branch, remote);
 		// Confirm that this branch exists on remote
-		if (doesRemoteExist(remote, branch)) {
+		if (await doesRemoteExist(remote, branch)) {
 			logStatus(StatusMessage.Confirmed);
 		} else {
 			return Promise.reject(getErrorMessage(ErrorMessage.BranchDoesNotExist, branch));
@@ -357,7 +364,7 @@ async function getVariables(): Promise<string> {
 		return Promise.reject(getErrorMessage(ErrorMessage.CouldNotCheckOutBranch, targetBranch));
 	}
 	// See if we get any merge conflicts
-	if (!isBranchCleanWhenUpdatedFromRemote(remote, targetBranch)) {
+	if (!(await isBranchCleanWhenUpdatedFromRemote(remote, targetBranch))) {
 		return Promise.reject(getErrorMessage(ErrorMessage.MergeConflictsOnPullToFix, targetBranch));
 	}
 	logStatus(StatusMessage.Done);
@@ -371,7 +378,7 @@ async function getVariables(): Promise<string> {
 		return Promise.reject(getErrorMessage(ErrorMessage.CouldNotCheckOutBranch, sourceBranch));
 	}
 	// Make sure no merge conflicts exist
-	if (!isBranchCleanWhenUpdatedFromRemote(remote, sourceBranch)) {
+	if (!(await isBranchCleanWhenUpdatedFromRemote(remote, sourceBranch))) {
 		return Promise.reject(getErrorMessage(ErrorMessage.MergeConflictsOnPullToFix, sourceBranch));
 	}
 	logStatus(StatusMessage.Done);
@@ -704,40 +711,41 @@ async function main(argv): Promise<void> {
 	// // serve(argv.port);
 }
 
-export const command = 'deploy [targetBranch]';
-export const desc = 'Manage set of tracked repositories';
-export const builder = (yargs: Argv<{}>): void => {
-	yargs
-		.positional('targetBranch', {
-			describe: 'The branch to deploy code to',
-			type: 'string',
-			default: 'master',
-		})
-		.option('sourceBranch', {
-			alias: 's',
-			type: 'string',
-			description: 'The branch containing the code to be deployed',
-		})
-		.option('developmentBranch', {
-			alias: 'w',
-			type: 'string',
-			description: 'The branch to update after completing deployment',
-			default: 'development',
-		})
-		.option('appVersion', {
-			alias: 'v',
-			type: 'string',
-			description: 'Specify the version number to deploy',
-		})
-		.option('nextAppVersion', {
-			alias: 'n',
-			type: 'string',
-			description: 'Specify the version number to update the development branch to',
-		})
-		.option('versionFile', {
-			alias: 'f',
-			type: 'string',
-			description: 'The file where the version number is tracked',
-		});
-};
+// export const command = 'deploy [targetBranch]';
+export const command = 'deploy';
+export const desc = 'Deploy features in a repository';
+// export const builder = (yargs: Argv<{}>): void => {
+// 	yargs
+// 		.positional('targetBranch', {
+// 			describe: 'The branch to deploy code to',
+// 			type: 'string',
+// 			default: 'master',
+// 		})
+// 		.option('sourceBranch', {
+// 			alias: 's',
+// 			type: 'string',
+// 			description: 'The branch containing the code to be deployed',
+// 		})
+// 		.option('developmentBranch', {
+// 			alias: 'w',
+// 			type: 'string',
+// 			description: 'The branch to update after completing deployment',
+// 			default: 'development',
+// 		})
+// 		.option('appVersion', {
+// 			alias: 'v',
+// 			type: 'string',
+// 			description: 'Specify the version number to deploy',
+// 		})
+// 		.option('nextAppVersion', {
+// 			alias: 'n',
+// 			type: 'string',
+// 			description: 'Specify the version number to update the development branch to',
+// 		})
+// 		.option('versionFile', {
+// 			alias: 'f',
+// 			type: 'string',
+// 			description: 'The file where the version number is tracked',
+// 		});
+// };
 export const handler = main;
