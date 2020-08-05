@@ -1,17 +1,19 @@
+import fs from 'fs';
 import path from 'path';
 import process from 'process';
 import {
-	doMergeConflictsExistOnCurrentBranch,
+	checkoutBranch,
+	createAndCheckoutBranch,
 	doesRemoteExist,
+	doesTagExist,
+	doMergeConflictsExistOnCurrentBranch,
 	getCurrentBranch,
-	getPackageJsonVersion,
+	getRepositoryVersion,
+	getSuggestedNextRepositoryVersion,
 	isBranchCleanWhenUpdatedFromRemote,
 	isGitInstalled,
 	isWorkingDirectoryClean,
-	doesTagExist,
-	getSuggestedNextPackageVersion,
-	checkoutBranch,
-	createAndCheckoutBranch,
+	updateRepositoryVersion,
 } from './utils';
 
 describe('utils', () => {
@@ -211,10 +213,10 @@ describe('utils', () => {
 			}
 		});
 	});
-	describe('getPackageJsonVersion', () => {
+	describe('getRepositoryVersion', () => {
 		it('returns a rejected promise when no file found', async () => {
 			try {
-				await getPackageJsonVersion();
+				await getRepositoryVersion();
 				expect(true).toBe(false);
 			} catch {
 				expect(true).toBe(true);
@@ -224,7 +226,7 @@ describe('utils', () => {
 			const spy = jest.spyOn(process, 'cwd');
 			spy.mockReturnValue(path.join(__dirname, '../../__mocks__'));
 			try {
-				await getPackageJsonVersion();
+				await getRepositoryVersion();
 				expect(true).toBe(false);
 			} catch {
 				expect(true).toBe(true);
@@ -233,20 +235,59 @@ describe('utils', () => {
 		it('returns a resolved promise when version found in file', async () => {
 			const spy = jest.spyOn(process, 'cwd');
 			spy.mockReturnValue(path.join(__dirname, '../../'));
-			try {
-				await getPackageJsonVersion();
-				expect(true).toBe(true);
-			} catch {
-				expect(true).toBe(false);
-			}
+			await getRepositoryVersion();
 		});
 	});
-	describe('getSuggestedNextPackageVersion', () => {
+	describe('updateRepositoryVersion', () => {
+		const mocksDirectory = path.join(__dirname, '../../__mocks__');
+		const renamedMockPackageJsonFile = path.join(mocksDirectory, '/package-test.json');
+		const mockPackageJsonFile = path.join(mocksDirectory, '/package.json');
+		const originalPackageJsonFile = path.join(__dirname, '../../package.json');
+
+		beforeAll(() => {
+			// Rename mocks package.json
+			fs.renameSync(mockPackageJsonFile, renamedMockPackageJsonFile);
+		});
+
+		afterAll(() => {
+			// Undo rename
+			fs.renameSync(renamedMockPackageJsonFile, mockPackageJsonFile);
+		});
+
+		beforeEach(() => {
+			const spy = jest.spyOn(process, 'cwd');
+			spy.mockReturnValue(mocksDirectory);
+			// Copy this repo's package.json
+			fs.copyFileSync(originalPackageJsonFile, mockPackageJsonFile);
+		});
+
+		afterEach(() => {
+			// Delete this repo's package.json
+			try {
+				fs.unlinkSync(mockPackageJsonFile);
+			} catch {}
+		});
+
+		it('correctly updates the package.json version', async () => {
+			const currentPackageJsonVersion = await getRepositoryVersion();
+			await updateRepositoryVersion(currentPackageJsonVersion, '50.50.50');
+			await expect(getRepositoryVersion()).resolves.toBe('50.50.50');
+		});
+
+		it('correctly updates the version.conf version', async () => {
+			fs.unlinkSync(mockPackageJsonFile);
+			
+			const currentPackageJsonVersion = await getRepositoryVersion();
+			await updateRepositoryVersion(currentPackageJsonVersion, '50.50.50');
+			await expect(getRepositoryVersion()).resolves.toBe('50.50.50');
+		});
+	});
+	describe('getSuggestedNextRepositoryVersion', () => {
 		it('returns the next minor version', () => {
-			expect(getSuggestedNextPackageVersion('1.4.0')).toBe('1.5.0');
-			expect(getSuggestedNextPackageVersion('1.4.1')).toBe('1.5.0');
-			expect(getSuggestedNextPackageVersion('10.20.30')).toBe('10.21.0');
-			expect(getSuggestedNextPackageVersion('')).toBe('1.0.0');
+			expect(getSuggestedNextRepositoryVersion('1.4.0')).toBe('1.5.0');
+			expect(getSuggestedNextRepositoryVersion('1.4.1')).toBe('1.5.0');
+			expect(getSuggestedNextRepositoryVersion('10.20.30')).toBe('10.21.0');
+			expect(getSuggestedNextRepositoryVersion('')).toBe('1.0.0');
 		});
 	});
 	describe('createAndCheckoutBranch', () => {

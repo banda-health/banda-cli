@@ -91,7 +91,7 @@ describe('deploy', () => {
 		mockedUtils.doesTagExist = jest.fn().mockReturnValue(Promise.resolve(false));
 		mockedUtils.doMergeConflictsExistOnCurrentBranch = jest.fn().mockReturnValue(Promise.resolve(false));
 		mockedUtils.getCurrentBranch = jest.fn().mockReturnValue(Promise.resolve(branch.CURRENT));
-		mockedUtils.getPackageJsonVersion = jest.fn().mockReturnValue(version.SOURCE);
+		mockedUtils.getRepositoryVersion = jest.fn().mockReturnValue(version.SOURCE);
 		mockedUtils.isBranchCleanWhenUpdatedFromRemote = jest.fn().mockReturnValue(true);
 		mockedUtils.isCurrentDirectoryGitRepo = jest.fn().mockReturnValue(Promise.resolve(true));
 		mockedUtils.isGitInstalled = jest.fn().mockReturnValue(Promise.resolve(true));
@@ -102,7 +102,7 @@ describe('deploy', () => {
 		mockedUtils.touch = jest.fn((fileName: string) => {
 			require('fs').writeFileSync(fileName);
 		});
-		mockedUtils.updatePackageJsonVersion = jest.fn();
+		mockedUtils.updateRepositoryVersion = jest.fn();
 	};
 
 	const configureToOnlyRunVariableInput = (): void => {

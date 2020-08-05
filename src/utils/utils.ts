@@ -1,6 +1,8 @@
 import fs from 'fs';
+import path from 'path';
 import { execGitCmd } from 'run-git-command';
-import { gitConfig, semverRegex } from './constants';
+import { gitConfig, semverRegex, versionFiles } from './constants';
+import { ErrorMessage, getErrorMessage } from './messages';
 
 /**
  * @async
@@ -119,14 +121,14 @@ export async function doesTagExist(tag: string): Promise<boolean> {
 }
 
 /**
- * Take a semVer package number and suggest the next minor version number
- * @param currentVersion A current semVer package number of the format #.#.#
+ * Take a semVer version number and suggest the next minor version number
+ * @param currentVersion A current semVer version number of the format #.#.#
  * @example
  * 1.4.0 -> 1.5.0
  * 1.5.9 -> 1.6.0
- * @returns The suggested next package version
+ * @returns The suggested next repository version
  */
-export function getSuggestedNextPackageVersion(currentVersion: string): string {
+export function getSuggestedNextRepositoryVersion(currentVersion: string): string {
 	if (!semverRegex.test(currentVersion)) {
 		return '1.0.0';
 	}
@@ -150,27 +152,35 @@ export async function doMergeConflictsExistOnCurrentBranch(): Promise<boolean> {
 }
 
 /**
- * Get the package.json file path
+ * Get the file containing the version for this repository
  */
-function getPackageJsonFilePath(): string {
-	return `${process.cwd()}/package.json`;
+function getVersionFilePath(): { versionFile: string; versionFilePath: string } {
+	const versionFile =
+		Object.keys(versionFiles).find((versionFile) => fs.existsSync(path.join(process.cwd(), `/${versionFile}`))) || '';
+	return {
+		versionFile,
+		versionFilePath: path.join(process.cwd(), `/${versionFile}`),
+	};
 }
 
 /**
  * @async
- * Gets the version number from the package.json stored in the current directory (if it exists)
- * @returns The version number in the package.json
+ * Gets the version number for the repository from a file in the repo stored in the current directory (if it exists)
+ * - package.json
+ * - version.conf
+ * @returns The version number of the repository
  */
-export async function getPackageJsonVersion(): Promise<string> {
+export async function getRepositoryVersion(): Promise<string> {
+	const { versionFile, versionFilePath } = getVersionFilePath();
 	return new Promise((resolve, reject) => {
-		fs.readFile(getPackageJsonFilePath(), 'utf8', (err, data) => {
+		fs.readFile(versionFilePath, 'utf8', (err, data) => {
 			if (err) {
 				reject(err);
 				return;
 			}
-			const match = data.match(/"version":\s?"(\d+\.\d+\.\d+)"/);
+			const match = data.match(new RegExp(versionFiles[versionFile].replace(/#\.#\.#/, '(\\d+\\.\\d+\\.\\d+)')));
 			if (!match || !match.length) {
-				reject('No version found.');
+				reject(getErrorMessage(ErrorMessage.NoVersionFound));
 				return;
 			}
 			resolve(match[1]);
@@ -180,21 +190,24 @@ export async function getPackageJsonVersion(): Promise<string> {
 
 /**
  * @async
- * Update the version number in the package.json file stored in the current directory (it if exists)
+ * Update the version number in the repository version file stored in the current directory (it if exists)
  * @param currentVersion The current version to search for
  * @param versionToUse The new version to update the file with
- * @returns The package.json update result
+ * @returns The repository version file update result
  */
-export async function updatePackageJsonVersion(currentVersion: string, versionToUse: string): Promise<void> {
+export async function updateRepositoryVersion(currentVersion: string, versionToUse: string): Promise<void> {
+	const { versionFile, versionFilePath } = getVersionFilePath();
 	return new Promise((resolve, reject) => {
-		fs.readFile(getPackageJsonFilePath(), 'utf8', (err, data) => {
+		fs.readFile(versionFilePath, 'utf8', (err, data) => {
 			if (err) {
 				reject(err);
 				return;
 			}
-			const versionRegex = new RegExp(`"version":\\s?"${currentVersion.replace(/\./g, '\\.')}"`);
-			const result = data.replace(versionRegex, `"version": "${versionToUse}"`);
-			fs.writeFile(getPackageJsonFilePath(), result, 'utf8', (err) => {
+			const versionRegex = new RegExp(
+				versionFiles[versionFile].replace(/#\.#\.#/, currentVersion.replace(/\./g, '\\.')),
+			);
+			const result = data.replace(versionRegex, versionFiles[versionFile].replace(/#\.#\.#/, versionToUse));
+			fs.writeFile(versionFilePath, result, 'utf8', (err) => {
 				if (err) {
 					reject(err);
 					return;

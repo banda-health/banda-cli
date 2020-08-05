@@ -27,16 +27,16 @@ import {
 	doMergeConflictsExistOnCurrentBranch,
 	getCurrentBranch,
 	getFileNameSaveCwd,
-	getPackageJsonVersion,
+	getRepositoryVersion,
 	isBranchCleanWhenUpdatedFromRemote,
+	isCurrentDirectoryGitRepo,
 	isGitInstalled,
 	isWorkingDirectoryClean,
 	mergeBranch,
 	pullBranchFromRemote,
 	pushToRemote,
 	touch,
-	updatePackageJsonVersion,
-	isCurrentDirectoryGitRepo,
+	updateRepositoryVersion,
 } from '../utils/utils';
 
 export interface UsersVariables {
@@ -363,7 +363,7 @@ async function getVariables(): Promise<string> {
 	logStatus(StatusMessage.Done);
 
 	// Get the current app version
-	const targetPackageVersion = await getPackageJsonVersion();
+	const targetPackageVersion = await getRepositoryVersion();
 
 	// Check out the source branch so we can get that version
 	logStatus(StatusMessage.FetchingSourceBranch, false, sourceBranch);
@@ -377,7 +377,7 @@ async function getVariables(): Promise<string> {
 	logStatus(StatusMessage.Done);
 
 	// Get the current app version
-	const sourcePackageVersion = await getPackageJsonVersion();
+	const sourcePackageVersion = await getRepositoryVersion();
 
 	// Ask the user what version they want to use
 	logStatus(StatusMessage.SourceAndTargetVersion, true, sourcePackageVersion, targetPackageVersion);
@@ -509,10 +509,10 @@ async function run(): Promise<string> {
 						// TODO: do anything here?
 						// return Promise.reject(getErrorMessage(ErrorMessage.CouldNotCheckOutBranch, releaseBranch));
 					}
-					const currentPackageVersion = await getPackageJsonVersion();
+					const currentPackageVersion = await getRepositoryVersion();
 					if (currentPackageVersion !== packageVersion) {
 						logStatus(StatusMessage.ReleaseBranchPackageVersionUpdate, false, packageVersion, releaseBranch);
-						await updatePackageJsonVersion(currentPackageVersion, packageVersion);
+						await updateRepositoryVersion(currentPackageVersion, packageVersion);
 
 						// Commit changes to release branch
 						if (!(await commitToBranch(commitMessage.UPDATE_APP_VERSION))) {
@@ -638,10 +638,10 @@ async function run(): Promise<string> {
 	}
 
 	// Update version number in appropriate file, if necessary
-	const currentPackageVersion = await getPackageJsonVersion();
+	const currentPackageVersion = await getRepositoryVersion();
 	if (currentPackageVersion !== nextPackageVersion) {
 		logStatus(StatusMessage.BranchPackageVersionUpdate, false, nextPackageVersion, developmentMergeBranch);
-		await updatePackageJsonVersion(currentPackageVersion, nextPackageVersion);
+		await updateRepositoryVersion(currentPackageVersion, nextPackageVersion);
 
 		// Commit changes to development merge branch
 		await commitToBranch(commitMessage.UPDATE_APP_VERSION);

@@ -5,3 +5,8 @@ export const gitConfig: commandConfig = {
 };
 
 export const semverRegex = /^\d+\.\d+\.\d+$/;
+
+export const versionFiles = {
+	'package.json': '"version": "#.#.#"',
+	'VERSION.conf': 'VERSION=#.#.#',
+};

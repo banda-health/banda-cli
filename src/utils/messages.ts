@@ -28,6 +28,7 @@ export enum ErrorMessage {
 	HaveSomeoneMerge,
 	CannotPushTags,
 	ErrorOnPull,
+	NoVersionFound,
 }
 
 export const getErrorMessage = (errorMessage: ErrorMessage, ...additionalMessageParameters: string[]): string => {
@@ -94,6 +95,8 @@ export const getErrorMessage = (errorMessage: ErrorMessage, ...additionalMessage
 			return 'You do not have permission to push tags. Get permission, then resume this process.';
 		case ErrorMessage.ErrorOnPull:
 			return `There was an error when pulling branch '${additionalMessageParameters[0] || undefinedValue.BRANCH}'.`;
+		case ErrorMessage.NoVersionFound:
+			return 'No version found.';
 		default:
 			return 'No error message defined...';
 	}
