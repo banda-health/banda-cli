@@ -20,6 +20,7 @@ describe('utils', () => {
 	const setGitCommands = (commandsAndTheirReturns: { [joinedCommand: string]: Promise<any> }) => {
 		require('run-git-command').__setMockResponse(commandsAndTheirReturns);
 	};
+	const dummyFileDirectory = path.join(__dirname, '../../__dummy__');
 
 	describe('isGitInstalled', () => {
 		it('returns false if Git not installed', async () => {
@@ -224,7 +225,7 @@ describe('utils', () => {
 		});
 		it('returns a rejected promise when no version found in file', async () => {
 			const spy = jest.spyOn(process, 'cwd');
-			spy.mockReturnValue(path.join(__dirname, '../../__mocks__'));
+			spy.mockReturnValue(dummyFileDirectory);
 			try {
 				await getRepositoryVersion();
 				expect(true).toBe(false);
@@ -239,24 +240,27 @@ describe('utils', () => {
 		});
 	});
 	describe('updateRepositoryVersion', () => {
-		const mocksDirectory = path.join(__dirname, '../../__mocks__');
-		const renamedMockPackageJsonFile = path.join(mocksDirectory, '/package-test.json');
-		const mockPackageJsonFile = path.join(mocksDirectory, '/package.json');
+		const renamedMockPackageJsonFile = path.join(dummyFileDirectory, '/package-test.json');
+		const mockPackageJsonFile = path.join(dummyFileDirectory, '/package.json');
+		const renamedMockVersionConfFile = path.join(dummyFileDirectory, '/VERSION-test.conf');
+		const mockVersionConfFile = path.join(dummyFileDirectory, '/VERSION.conf');
 		const originalPackageJsonFile = path.join(__dirname, '../../package.json');
 
 		beforeAll(() => {
 			// Rename mocks package.json
 			fs.renameSync(mockPackageJsonFile, renamedMockPackageJsonFile);
+			fs.copyFileSync(mockVersionConfFile, renamedMockVersionConfFile);
 		});
 
 		afterAll(() => {
 			// Undo rename
 			fs.renameSync(renamedMockPackageJsonFile, mockPackageJsonFile);
+			fs.renameSync(renamedMockVersionConfFile, mockVersionConfFile);
 		});
 
 		beforeEach(() => {
 			const spy = jest.spyOn(process, 'cwd');
-			spy.mockReturnValue(mocksDirectory);
+			spy.mockReturnValue(dummyFileDirectory);
 			// Copy this repo's package.json
 			fs.copyFileSync(originalPackageJsonFile, mockPackageJsonFile);
 		});
