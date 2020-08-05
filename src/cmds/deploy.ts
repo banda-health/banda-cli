@@ -595,14 +595,13 @@ async function run(): Promise<string> {
 		await checkoutBranch(developmentBranch);
 		// See if we get any merge conflicts
 		if (!(await pullBranchFromRemote(remote, developmentBranch))) {
+			touch(progressFile.developmentPullMergeLockFile);
 			// See if there were any merge conflicts
 			if (await doMergeConflictsExistOnCurrentBranch()) {
 				// Yep, there were merge conflicts
-				touch(progressFile.developmentPullMergeLockFile);
 				return Promise.reject(getErrorMessage(ErrorMessage.MergeConflictsOnPull));
 			}
 			// Otherwise, an error occurred when pulling
-			touch(progressFile.developmentPullMergeLockFile);
 			return Promise.reject(getErrorMessage(ErrorMessage.ErrorOnPull, developmentBranch));
 		}
 		logStatus(StatusMessage.Done);
@@ -654,13 +653,12 @@ async function run(): Promise<string> {
 	} catch {}
 
 	logStatus(StatusMessage.PushingToRemote, false, developmentBranch);
-	try {
-		await pushToRemote(remote, developmentBranch, false);
+	if (await pushToRemote(remote, developmentBranch)) {
 		logStatus(StatusMessage.Done);
 		logStatus(StatusMessage.RemovingTemporaryMergeBranch, true, developmentMergeBranch);
 		await deleteLocalBranch(developmentMergeBranch, false);
-	} catch {
-		// If there was an error with the previous command, it (probably) means they don't have permission to write to this branch
+	} else {
+		// Getting here (probably) means they don't have permission to write to this branch
 		// Since they can't push to the target branch, push the release and say they need to have someone else merge it
 		logError(ErrorMessage.CannotPushBranchToFinish, developmentBranch, developmentMergeBranch);
 		await checkoutBranch(developmentMergeBranch);
@@ -702,7 +700,7 @@ async function main(argv): Promise<void> {
 }
 
 export const command = 'deploy [targetBranch]';
-export const desc = 'Manage set of tracked repos';
+export const desc = 'Manage set of tracked repositories';
 export const builder = (yargs: Argv<{}>): void => {
 	yargs
 		.positional('targetBranch', {

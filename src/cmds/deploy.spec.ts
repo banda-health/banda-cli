@@ -75,16 +75,6 @@ describe('deploy', () => {
 			.mockReturnValueOnce({ answer: branch.DEVELOPMENT })
 			.mockReturnValueOnce({ answer: version.USE })
 			.mockReturnValueOnce({ answer: version.NEXT });
-		mockedUtils.createDevelopmentMergeBranchName = jest.fn().mockReturnValue(branch.DEVELOPMENT_MERGE);
-		mockedUtils.createReleaseBranchName = jest.fn().mockReturnValue(branch.RELEASE_BRANCH);
-		mockedUtils.createReleaseTag = jest.fn().mockReturnValue(TAG);
-		mockedUtils.createTag = jest.fn().mockReturnValue(Promise.resolve(true));
-		mockedUtils.doesRemoteExist = jest.fn().mockReturnValue(true);
-		mockedUtils.doesTagExist = jest.fn().mockReturnValue(Promise.resolve(false));
-		mockedUtils.doMergeConflictsExistOnCurrentBranch = jest.fn().mockReturnValue(Promise.resolve(false));
-		mockedUtils.getCurrentBranch = jest.fn().mockReturnValue(Promise.resolve(branch.CURRENT));
-		mockedUtils.getPackageJsonVersion = jest.fn().mockReturnValue(version.SOURCE);
-		mockedUtils.isBranchCleanWhenUpdatedFromRemote = jest.fn().mockReturnValue(true);
 	};
 
 	const setupSuccessfulExecution = () => {
@@ -108,7 +98,9 @@ describe('deploy', () => {
 		mockedUtils.mergeBranch = jest.fn().mockReturnValue(Promise.resolve());
 		mockedUtils.pullBranchFromRemote = jest.fn().mockReturnValue(Promise.resolve(true));
 		mockedUtils.pushToRemote = jest.fn().mockReturnValue(Promise.resolve(true));
-		mockedUtils.touch = jest.fn();
+		mockedUtils.touch = jest.fn((fileName: string) => {
+			require('fs').writeFileSync(fileName);
+		});
 		mockedUtils.updatePackageJsonVersion = jest.fn();
 	};
 
@@ -120,6 +112,14 @@ describe('deploy', () => {
 		expect(loggedOutput[loggedOutput.length - 1]).toBe(
 			getErrorMessage(ErrorMessage.CouldNotCreateBranch, branch.RELEASE_BRANCH),
 		);
+	};
+
+	const confirmProcessExecutedSuccessfully = () => {
+		expect(loggedOutput[loggedOutput.length - 1]).toBe(getStatusMessage(StatusMessage.Finished));
+	};
+
+	const addContinuationResponse = () => {
+		(inquirer as any).prompt.mockReturnValueOnce({ answer: true });
 	};
 
 	describe('checkPrerequisites', () => {
@@ -166,7 +166,7 @@ describe('deploy', () => {
 			} catch {}
 			confirmTestExitedAfterRunVariableInput();
 			loggedOutput.length = 0;
-			(inquirer as any).prompt.mockReturnValueOnce({ answer: true });
+			addContinuationResponse();
 			try {
 				await handler({});
 			} catch {}
@@ -273,29 +273,168 @@ describe('deploy', () => {
 		});
 	});
 	describe('run', () => {
-		it('runs successfully', async () => {
+		beforeEach(() => {
 			setupSuccessfulVariableInput();
+		});
+
+		const ensureSkippedMessagesAreNotDisplayedOnResume = (...messagesThatShouldBeSkipped: string[]) => {
+			expect(loggedOutput.some((loggedValue) => messagesThatShouldBeSkipped.includes(loggedValue))).toBe(false);
+		};
+
+		const resetWithContinuation = () => {
+			loggedOutput.length = 0;
+			setupSuccessfulExecution();
+			addContinuationResponse();
+		};
+
+		it('runs successfully', async () => {
 			try {
 				await handler({});
-				expect(loggedOutput[loggedOutput.length - 1]).toBe(getStatusMessage(StatusMessage.Finished));
 			} catch {
 				expect(true).toBe(false);
 			}
+			confirmProcessExecutedSuccessfully();
 		});
 		it(`doesn't try to update version numbers if there isn't a change`, async () => {
-			setupSuccessfulVariableInput();
 			const targetUpdateLog = getStatusMessage(StatusMessage.BranchPackageVersionUpdate, version.TARGET, version.USE);
 			try {
 				await handler({});
-				expect(loggedOutput.some((loggedValue) => loggedValue === targetUpdateLog)).toBe(false);
 			} catch {
 				expect(true).toBe(false);
 			}
+			expect(loggedOutput.some((loggedValue) => loggedValue === targetUpdateLog)).toBe(false);
 		});
-		it(`exits the process if there are merge conflicts when merging to target from source and allows a user to resume upon re-run`, async () => {});
-		it(`exits the process if the user doesn't have rights to push to target branch`, async () => {});
-		it(`exits the process if the user can't push tags to the target branch`, async () => {});
-		it(`exits the process if there are merge conflicts when merging from target to development and allows a user to resume upon re-run`, async () => {});
-		it(`pushes the development merge to remote if the user doesn't have access to push to development`, async () => {});
+		it(`exits the process if there are merge conflicts when merging to target from source and allows a user to resume upon re-run`, async () => {
+			mockedUtils.mergeBranch = jest.fn().mockReturnValue(Promise.reject());
+			mockedUtils.doMergeConflictsExistOnCurrentBranch = jest.fn().mockReturnValue(Promise.resolve(true));
+			try {
+				await handler({});
+				expect(true).toBe(false);
+			} catch {
+				expect(loggedOutput[loggedOutput.length - 1]).toBe(
+					getErrorMessage(ErrorMessage.FixReleaseBranchMergeConflicts, branch.RELEASE_BRANCH),
+				);
+			}
+			resetWithContinuation();
+			try {
+				await handler({});
+			} catch {
+				expect(true).toBe(false);
+			}
+			confirmProcessExecutedSuccessfully();
+			ensureSkippedMessagesAreNotDisplayedOnResume(
+				getStatusMessage(StatusMessage.CreatingReleaseBranch, branch.RELEASE_BRANCH, branch.TARGET),
+			);
+		});
+		it(`exits the process if the user doesn't have rights to push to target branch`, async () => {
+			mockedUtils.pushToRemote = jest.fn().mockReturnValue(Promise.resolve(false));
+			try {
+				await handler({});
+				expect(true).toBe(false);
+			} catch {
+				expect(loggedOutput[loggedOutput.length - 1]).toBe(
+					getErrorMessage(ErrorMessage.HaveSomeoneMerge, branch.RELEASE_BRANCH),
+				);
+			}
+			resetWithContinuation();
+			try {
+				await handler({});
+			} catch {
+				expect(true).toBe(false);
+			}
+			confirmProcessExecutedSuccessfully();
+			ensureSkippedMessagesAreNotDisplayedOnResume(
+				getStatusMessage(StatusMessage.CreatingReleaseBranch, branch.RELEASE_BRANCH, branch.TARGET),
+				getStatusMessage(StatusMessage.PushingToRemote, branch.TARGET),
+			);
+		});
+		it(`exits the process if the user can't push tags to the target branch`, async () => {
+			mockedUtils.pushToRemote = jest
+				.fn()
+				.mockReturnValue(Promise.resolve(false))
+				.mockReturnValueOnce(Promise.resolve(true));
+			try {
+				await handler({});
+				expect(true).toBe(false);
+			} catch {
+				expect(loggedOutput[loggedOutput.length - 1]).toBe(getErrorMessage(ErrorMessage.CannotPushTags));
+			}
+			resetWithContinuation();
+			try {
+				await handler({});
+			} catch {
+				expect(true).toBe(false);
+			}
+			confirmProcessExecutedSuccessfully();
+			ensureSkippedMessagesAreNotDisplayedOnResume(
+				getStatusMessage(StatusMessage.CreatingReleaseBranch, branch.RELEASE_BRANCH, branch.TARGET),
+				getStatusMessage(StatusMessage.PushingToRemote, branch.TARGET),
+				getStatusMessage(StatusMessage.CreatingTag, TAG, branch.TARGET),
+			);
+		});
+		it(`exits the process if there are merge conflicts when pulling from remote on development branch and allows a user to resume upon re-run`, async () => {
+			mockedUtils.pullBranchFromRemote = jest
+				.fn()
+				.mockReturnValue(Promise.resolve(false))
+				.mockReturnValueOnce(Promise.resolve(true));
+			mockedUtils.doMergeConflictsExistOnCurrentBranch = jest.fn().mockReturnValue(Promise.resolve(true));
+			try {
+				await handler({});
+				expect(true).toBe(false);
+			} catch {
+				expect(loggedOutput[loggedOutput.length - 1]).toBe(getErrorMessage(ErrorMessage.MergeConflictsOnPull));
+			}
+			resetWithContinuation();
+			try {
+				await handler({});
+			} catch {
+				expect(true).toBe(false);
+			}
+			confirmProcessExecutedSuccessfully();
+			ensureSkippedMessagesAreNotDisplayedOnResume(
+				getStatusMessage(StatusMessage.CreatingReleaseBranch, branch.RELEASE_BRANCH, branch.TARGET),
+				getStatusMessage(StatusMessage.PushingToRemote, branch.TARGET),
+				getStatusMessage(StatusMessage.CreatingTag, TAG, branch.TARGET),
+				getStatusMessage(StatusMessage.PushingTagToRemote, TAG),
+			);
+		});
+		it(`exits the process if there are merge conflicts when merging from target to development and allows a user to resume upon re-run`, async () => {
+			mockedUtils.mergeBranch = jest
+				.fn()
+				.mockReturnValue(Promise.reject())
+				.mockReturnValueOnce(Promise.resolve())
+				.mockReturnValueOnce(Promise.resolve());
+			mockedUtils.doMergeConflictsExistOnCurrentBranch = jest.fn().mockReturnValue(Promise.resolve(true));
+			try {
+				await handler({});
+				expect(true).toBe(false);
+			} catch {
+				expect(loggedOutput[loggedOutput.length - 1]).toBe(getErrorMessage(ErrorMessage.MergeConflictsOnMerge));
+			}
+			resetWithContinuation();
+			try {
+				await handler({});
+			} catch {
+				expect(true).toBe(false);
+			}
+			confirmProcessExecutedSuccessfully();
+			ensureSkippedMessagesAreNotDisplayedOnResume(
+				getStatusMessage(StatusMessage.CreatingReleaseBranch, branch.RELEASE_BRANCH, branch.TARGET),
+				getStatusMessage(StatusMessage.PushingToRemote, branch.TARGET),
+				getStatusMessage(StatusMessage.CreatingTag, TAG, branch.TARGET),
+				getStatusMessage(StatusMessage.CreatingTemporaryMergeBranch, branch.DEVELOPMENT_MERGE, branch.DEVELOPMENT),
+			);
+		});
+		it(`pushes the development merge to remote if the user doesn't have access to push to development`, async () => {
+			mockedUtils.pushToRemote = jest
+				.fn()
+				.mockReturnValue(Promise.resolve(false))
+				.mockReturnValueOnce(Promise.resolve(true))
+				.mockReturnValueOnce(Promise.resolve(true));
+			await handler({});
+			expect(loggedOutput[loggedOutput.length - 2]).toBe(
+				getStatusMessage(StatusMessage.MergeOnRemoteToFinish, branch.DEVELOPMENT_MERGE),
+			);
+		});
 	});
 });

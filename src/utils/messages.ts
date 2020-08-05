@@ -75,9 +75,7 @@ export const getErrorMessage = (errorMessage: ErrorMessage, ...additionalMessage
 			return chalk.red(
 				`You do not have permission to write to '${
 					additionalMessageParameters[0] || undefinedValue.BRANCH
-				}'. Pushing '${
-					additionalMessageParameters[1] || undefinedValue.BRANCH
-				}' to remote - please have someone merge it for you to finish this process.`,
+				}'. Pushing '${additionalMessageParameters[1] || undefinedValue.BRANCH}' to remote.`,
 			);
 		case ErrorMessage.CannotPushBranchToFinish:
 			return chalk.red(
@@ -88,7 +86,7 @@ export const getErrorMessage = (errorMessage: ErrorMessage, ...additionalMessage
 		case ErrorMessage.HaveSomeoneMerge:
 			return `Please have someone merge '${
 				additionalMessageParameters[0] || undefinedValue.BRANCH
-			} for you, then continue this process.`;
+			}' for you, then continue this process.`;
 		case ErrorMessage.CannotPushTags:
 			return 'You do not have permission to push tags. Get permission, then resume this process.';
 		case ErrorMessage.ErrorOnPull:
@@ -206,7 +204,7 @@ export const getStatusMessage = (statusMessage: StatusMessage, ...additionalMess
 			return chalk.yellow(
 				`Please have someone merge '${
 					additionalMessageParameters[0] || undefinedValue.BRANCH
-				} for you to finish this process.`,
+				}' for you to finish this process.`,
 			);
 		default:
 			return 'No status message defined...';
