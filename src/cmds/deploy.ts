@@ -36,6 +36,7 @@ import {
 	pushToRemote,
 	touch,
 	updatePackageJsonVersion,
+	isCurrentDirectoryGitRepo,
 } from '../utils/utils';
 
 export interface UsersVariables {
@@ -109,6 +110,10 @@ async function checkPrerequisites(): Promise<string> {
 	// Check if git is installed
 	if (!(await isGitInstalled())) {
 		return Promise.reject(getErrorMessage(ErrorMessage.GitNotInstalled));
+	}
+	// Ensure the current directory is a git repository
+	if (!(await isCurrentDirectoryGitRepo())) {
+		return Promise.reject(getErrorMessage(ErrorMessage.CurrentDirectoryNotGitRepo));
 	}
 	// Ensure working directory is clean
 	if (!(await isWorkingDirectoryClean())) {

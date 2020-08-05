@@ -9,6 +9,7 @@ const undefinedValue = {
 
 export enum ErrorMessage {
 	GitNotInstalled,
+	CurrentDirectoryNotGitRepo,
 	WorkspaceNotClean,
 	RemoteDoesNotExist,
 	BranchDoesNotExist,
@@ -33,6 +34,8 @@ export const getErrorMessage = (errorMessage: ErrorMessage, ...additionalMessage
 	switch (errorMessage) {
 		case ErrorMessage.GitNotInstalled:
 			return 'Git is not installed. Please install before continuing.';
+		case ErrorMessage.GitNotInstalled:
+			return 'The current directory is not a Git repository. Stopping.';
 		case ErrorMessage.WorkspaceNotClean:
 			return 'Working directory is not clean. Please stash or commit changes before continuing.';
 		case ErrorMessage.RemoteDoesNotExist:

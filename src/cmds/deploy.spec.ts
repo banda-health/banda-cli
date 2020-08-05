@@ -93,6 +93,7 @@ describe('deploy', () => {
 		mockedUtils.getCurrentBranch = jest.fn().mockReturnValue(Promise.resolve(branch.CURRENT));
 		mockedUtils.getPackageJsonVersion = jest.fn().mockReturnValue(version.SOURCE);
 		mockedUtils.isBranchCleanWhenUpdatedFromRemote = jest.fn().mockReturnValue(true);
+		mockedUtils.isCurrentDirectoryGitRepo = jest.fn().mockReturnValue(Promise.resolve(true));
 		mockedUtils.isGitInstalled = jest.fn().mockReturnValue(Promise.resolve(true));
 		mockedUtils.isWorkingDirectoryClean = jest.fn().mockReturnValue(Promise.resolve(true));
 		mockedUtils.mergeBranch = jest.fn().mockReturnValue(Promise.resolve());
@@ -132,7 +133,15 @@ describe('deploy', () => {
 				expect(loggedOutput[loggedOutput.length - 1]).toBe(getErrorMessage(ErrorMessage.GitNotInstalled));
 			}
 		});
-
+		it('stops if current directory is not a git repository', async () => {
+			mockedUtils.isCurrentDirectoryGitRepo = jest.fn().mockReturnValue(Promise.resolve(false));
+			try {
+				await handler({});
+				expect(true).toBe(false);
+			} catch {
+				expect(loggedOutput[loggedOutput.length - 1]).toBe(getErrorMessage(ErrorMessage.CurrentDirectoryNotGitRepo));
+			}
+		});
 		it('fails if working directory is not clean', async () => {
 			mockedUtils.isGitInstalled = jest.fn().mockReturnValue(true);
 			mockedUtils.isWorkingDirectoryClean = jest.fn().mockReturnValue(false);
