@@ -3,9 +3,10 @@
 	"version": "1.0.0",
 	"description": "A CLI to help with all your Banda needs",
 	"main": "build/cli.js",
+	"types": "build/cli.d.ts",
 	"bin": {
-		"@kwburnett/banda": "bin/cli",
-		"banda": "bin/cli"
+		"@kwburnett/banda": "bin/banda",
+		"banda": "bin/banda"
 	},
 	"publishConfig": {
 		"access": "public"
