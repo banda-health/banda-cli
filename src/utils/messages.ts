@@ -251,5 +251,5 @@ export const getQuestion = (question: Question, ...additionalQuestionParameters:
 };
 
 export const commitMessage = {
-	UPDATE_APP_VERSION: 'updating app version',
+	UPDATE_APP_VERSION: 'chore: update app version',
 };

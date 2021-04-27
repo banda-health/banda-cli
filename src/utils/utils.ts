@@ -321,7 +321,7 @@ export async function mergeBranch(branchToMerge: string): Promise<void> {
  */
 export async function commitToBranch(message: string): Promise<boolean> {
 	try {
-		await execGitCmd(['commit', '-am', `"${message}"`], gitConfig);
+		await execGitCmd(['commit', '-am', `${message}`], gitConfig);
 		return true;
 	} catch {}
 	return false;
