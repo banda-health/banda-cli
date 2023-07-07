@@ -67,6 +67,9 @@ const defaultDevelopmentBranch: string = 'develop';
 let initialBranch: string;
 const progressFileDir = '/../../progress-files';
 const progressFile = {
+	get directory() {
+		return `${__dirname}${progressFileDir}`;
+	},
 	get variableSaveFile() {
 		return `${__dirname}${progressFileDir}/${getFileNameSaveCwd()}-deploy.conf`;
 	},
@@ -118,6 +121,10 @@ async function checkPrerequisites(): Promise<string> {
 	// Ensure working directory is clean
 	if (!(await isWorkingDirectoryClean())) {
 		return Promise.reject(getErrorMessage(ErrorMessage.WorkspaceNotClean));
+	}
+	// Ensure progress directory is created
+	if (!fs.existsSync(progressFile.directory)) {
+		fs.mkdirSync(progressFile.directory);
 	}
 	return Promise.resolve('');
 }

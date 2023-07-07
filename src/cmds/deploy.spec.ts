@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import inquirer from 'inquirer';
 import {
 	ErrorMessage,
@@ -111,7 +112,7 @@ describe('deploy', () => {
 
 	const confirmTestExitedAfterRunVariableInput = (): void => {
 		expect(loggedOutput[loggedOutput.length - 1]).toBe(
-			getErrorMessage(ErrorMessage.CouldNotCreateBranch, branch.RELEASE_BRANCH),
+			chalk.red(getErrorMessage(ErrorMessage.CouldNotCreateBranch, branch.RELEASE_BRANCH)),
 		);
 	};
 
@@ -130,7 +131,7 @@ describe('deploy', () => {
 				await handler({});
 				expect(true).toBe(false);
 			} catch {
-				expect(loggedOutput[loggedOutput.length - 1]).toBe(getErrorMessage(ErrorMessage.GitNotInstalled));
+				expect(loggedOutput[loggedOutput.length - 1]).toBe(chalk.red(getErrorMessage(ErrorMessage.GitNotInstalled)));
 			}
 		});
 		it('stops if current directory is not a git repository', async () => {
@@ -139,7 +140,9 @@ describe('deploy', () => {
 				await handler({});
 				expect(true).toBe(false);
 			} catch {
-				expect(loggedOutput[loggedOutput.length - 1]).toBe(getErrorMessage(ErrorMessage.CurrentDirectoryNotGitRepo));
+				expect(loggedOutput[loggedOutput.length - 1]).toBe(
+					chalk.red(getErrorMessage(ErrorMessage.CurrentDirectoryNotGitRepo)),
+				);
 			}
 		});
 		it('fails if working directory is not clean', async () => {
@@ -149,7 +152,7 @@ describe('deploy', () => {
 				await handler({});
 				expect(true).toBe(false);
 			} catch {
-				expect(loggedOutput[loggedOutput.length - 1]).toBe(getErrorMessage(ErrorMessage.WorkspaceNotClean));
+				expect(loggedOutput[loggedOutput.length - 1]).toBe(chalk.red(getErrorMessage(ErrorMessage.WorkspaceNotClean)));
 			}
 		});
 	});
@@ -206,7 +209,7 @@ describe('deploy', () => {
 				await handler({});
 				expect(true).toBe(false);
 			} catch {
-				expect(loggedOutput[loggedOutput.length - 1]).toBe(getErrorMessage(ErrorMessage.RemoteDoesNotExist, REMOTE));
+				expect(loggedOutput[loggedOutput.length - 1]).toBe(chalk.red(getErrorMessage(ErrorMessage.RemoteDoesNotExist, REMOTE)));
 			}
 		});
 		it('if the same source and target branches are selected, a rejected promise is returned', async () => {
@@ -321,7 +324,7 @@ describe('deploy', () => {
 				expect(true).toBe(false);
 			} catch {
 				expect(loggedOutput[loggedOutput.length - 1]).toBe(
-					getErrorMessage(ErrorMessage.FixReleaseBranchMergeConflicts, branch.RELEASE_BRANCH),
+					chalk.red(getErrorMessage(ErrorMessage.FixReleaseBranchMergeConflicts, branch.RELEASE_BRANCH)),
 				);
 			}
 			resetWithContinuation();
@@ -342,7 +345,7 @@ describe('deploy', () => {
 				expect(true).toBe(false);
 			} catch {
 				expect(loggedOutput[loggedOutput.length - 1]).toBe(
-					getErrorMessage(ErrorMessage.HaveSomeoneMerge, branch.RELEASE_BRANCH),
+					chalk.red(getErrorMessage(ErrorMessage.HaveSomeoneMerge, branch.RELEASE_BRANCH)),
 				);
 			}
 			resetWithContinuation();
@@ -366,7 +369,7 @@ describe('deploy', () => {
 				await handler({});
 				expect(true).toBe(false);
 			} catch {
-				expect(loggedOutput[loggedOutput.length - 1]).toBe(getErrorMessage(ErrorMessage.CannotPushTags));
+				expect(loggedOutput[loggedOutput.length - 1]).toBe(chalk.red(getErrorMessage(ErrorMessage.CannotPushTags)));
 			}
 			resetWithContinuation();
 			try {
@@ -391,7 +394,9 @@ describe('deploy', () => {
 				await handler({});
 				expect(true).toBe(false);
 			} catch {
-				expect(loggedOutput[loggedOutput.length - 1]).toBe(getErrorMessage(ErrorMessage.MergeConflictsOnPull));
+				expect(loggedOutput[loggedOutput.length - 1]).toBe(
+					chalk.red(getErrorMessage(ErrorMessage.MergeConflictsOnPull)),
+				);
 			}
 			resetWithContinuation();
 			try {
@@ -418,7 +423,9 @@ describe('deploy', () => {
 				await handler({});
 				expect(true).toBe(false);
 			} catch {
-				expect(loggedOutput[loggedOutput.length - 1]).toBe(getErrorMessage(ErrorMessage.MergeConflictsOnMerge));
+				expect(loggedOutput[loggedOutput.length - 1]).toBe(
+					chalk.red(getErrorMessage(ErrorMessage.MergeConflictsOnMerge)),
+				);
 			}
 			resetWithContinuation();
 			try {

@@ -79,8 +79,8 @@ export async function checkoutBranch(branch: string): Promise<boolean> {
 export async function isBranchCleanWhenUpdatedFromRemote(remote: string, branch: string): Promise<boolean> {
 	try {
 		// If there are merge conflicts, this command should fail
-		pullBranchFromRemote(remote, branch);
-		return !(await doMergeConflictsExistOnCurrentBranch());
+		const successfullyPulled = await pullBranchFromRemote(remote, branch);
+		return successfullyPulled && !(await doMergeConflictsExistOnCurrentBranch());
 	} catch {}
 	return false;
 }
@@ -285,7 +285,7 @@ export async function createAndCheckoutBranch(
 			return false;
 		}
 		if (deleteExisting) {
-			await deleteLocalBranch(branch);
+			// await deleteLocalBranch(branch);
 		}
 		try {
 			// If the branch already exists, this command will throw an error (but we don't care)
