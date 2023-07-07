@@ -55,7 +55,3 @@ npm test
 - Update the CLI to take arguments for all the prompts
 - Configure the CLI through a config file(s)
 - Add other commands that the team needs
-
-# Repositories supported
- - greenlight-client
- - greenlight-webserver
