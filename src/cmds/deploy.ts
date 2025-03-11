@@ -1,7 +1,7 @@
 import chalk from 'chalk';
+import { Command } from 'commander';
 import fs from 'fs';
-import { prompt } from 'inquirer';
-import { Argv } from 'yargs';
+import inquirer from 'inquirer';
 import { semverRegex } from '../utils/constants';
 import {
 	commitMessage,
@@ -50,12 +50,12 @@ export interface UsersVariables {
 }
 
 // Script user-input variables
-let remote: string;
-let sourceBranch: string;
-let targetBranch: string;
-let developmentBranch: string;
-let packageVersion: string;
-let nextPackageVersion: string;
+let remote = '';
+let sourceBranch = '';
+let targetBranch = '';
+let developmentBranch = '';
+let packageVersion = '';
+let nextPackageVersion = '';
 // This variable isn't directly user-input, but it's calculated off packageVersion
 let tag: string;
 
@@ -95,13 +95,13 @@ const QUESTION_ANSWER_PROPERTY = 'answer';
  * Reset this module's state (mainly used in testing)
  */
 export function resetState() {
-	remote = null;
-	sourceBranch = null;
-	targetBranch = null;
-	developmentBranch = null;
-	packageVersion = null;
-	nextPackageVersion = null;
-	tag = null;
+	remote = '';
+	sourceBranch = '';
+	targetBranch = '';
+	developmentBranch = '';
+	packageVersion = '';
+	nextPackageVersion = '';
+	tag = '';
 }
 
 /**
@@ -280,7 +280,7 @@ async function getVariables(): Promise<string> {
 	// Ask the user if they want to continue from the previous execution
 	if (canThePreviousProcessBeContinued()) {
 		const userWantsToContinuePreviousProcess = (
-			await prompt([
+			await inquirer.prompt([
 				{
 					type: 'confirm',
 					name: QUESTION_ANSWER_PROPERTY,
@@ -299,7 +299,7 @@ async function getVariables(): Promise<string> {
 
 	// Confirm Git remote to use (default origin)
 	remote = (
-		await prompt([
+		await inquirer.prompt([
 			{
 				type: 'input',
 				name: QUESTION_ANSWER_PROPERTY,
@@ -316,7 +316,7 @@ async function getVariables(): Promise<string> {
 		initialBranch === defaultTargetBranch || !initialBranch ? defaultSourceBranch : initialBranch;
 	// Confirm source branch (default the branch they're on, unless it's master)
 	sourceBranch = (
-		await prompt([
+		await inquirer.prompt([
 			{
 				type: 'input',
 				name: QUESTION_ANSWER_PROPERTY,
@@ -329,7 +329,7 @@ async function getVariables(): Promise<string> {
 
 	// Confirm target branch (default master)
 	targetBranch = (
-		await prompt([
+		await inquirer.prompt([
 			{
 				type: 'input',
 				name: QUESTION_ANSWER_PROPERTY,
@@ -345,7 +345,7 @@ async function getVariables(): Promise<string> {
 
 	// Confirm development branch
 	developmentBranch = (
-		await prompt([
+		await inquirer.prompt([
 			{
 				type: 'input',
 				name: QUESTION_ANSWER_PROPERTY,
@@ -395,7 +395,7 @@ async function getVariables(): Promise<string> {
 
 	// Ask the user what version they want to use
 	logStatus(StatusMessage.SourceAndTargetVersion, true, sourcePackageVersion, targetPackageVersion);
-	const packageQuestion = {
+	const packageQuestion: Parameters<typeof inquirer.prompt>[0] = {
 		type: 'input',
 		name: QUESTION_ANSWER_PROPERTY,
 		message: getQuestion(Question.VersionNumberToUse),
@@ -405,7 +405,7 @@ async function getVariables(): Promise<string> {
 		if (packageVersion) {
 			logError(ErrorMessage.VersionFormatWrong, packageVersion);
 		}
-		packageVersion = (await prompt([packageQuestion]))[QUESTION_ANSWER_PROPERTY];
+		packageVersion = (await inquirer.prompt([packageQuestion]))[QUESTION_ANSWER_PROPERTY];
 	}
 
 	tag = createReleaseTag(packageVersion);
@@ -420,7 +420,7 @@ async function getVariables(): Promise<string> {
 	let suggestedNextPackageVersion = packageVersion.replace(/\.\d+\.\d+$/, '');
 	// Next, increment the minor package version, and set the patch version to 0
 	suggestedNextPackageVersion += `.${parseInt(packageVersion.replace(/^\d+\./, ''), 10) + 1}.0`;
-	const nextPackageQuestion = {
+	const nextPackageQuestion: Parameters<typeof inquirer.prompt>[0] = {
 		type: 'input',
 		name: QUESTION_ANSWER_PROPERTY,
 		message: getQuestion(Question.NextVersionToUse, developmentBranch),
@@ -431,7 +431,7 @@ async function getVariables(): Promise<string> {
 		if (nextPackageVersion) {
 			logError(ErrorMessage.VersionFormatWrong, nextPackageVersion);
 		}
-		nextPackageVersion = (await prompt([nextPackageQuestion]))[QUESTION_ANSWER_PROPERTY];
+		nextPackageVersion = (await inquirer.prompt([nextPackageQuestion]))[QUESTION_ANSWER_PROPERTY];
 	}
 
 	// If we've made it here, we can save these variables to a file in case the process fails and needs to be restarted
@@ -704,7 +704,7 @@ async function finish() {
 	logStatus(StatusMessage.Finished);
 }
 
-async function main(argv): Promise<void> {
+async function main(): Promise<void> {
 	try {
 		await checkPrerequisites();
 		await getVariables();
@@ -719,8 +719,6 @@ async function main(argv): Promise<void> {
 }
 
 // export const command = 'deploy [targetBranch]';
-export const command = 'deploy';
-export const desc = 'Deploy features in a repository';
 // export const builder = (yargs: Argv<{}>): void => {
 // 	yargs
 // 		.positional('targetBranch', {
@@ -755,4 +753,11 @@ export const desc = 'Deploy features in a repository';
 // 			description: 'The file where the version number is tracked',
 // 		});
 // };
+
 export const handler = main;
+export function makeDeployCommand() {
+	const deploy = new Command('deploy');
+	deploy.description('Deploy features in a repository');
+	deploy.action(() => main());
+	return deploy;
+}

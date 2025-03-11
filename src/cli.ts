@@ -1,3 +1,10 @@
-import yargs from 'yargs';
+#!/usr/bin/env node
 
-yargs.commandDir('cmds').demandCommand().help().argv;
+import { Command } from 'commander';
+import { makeDeployCommand } from './cmds/deploy';
+
+const program = new Command();
+
+program.addCommand(makeDeployCommand());
+
+program.parse(process.argv);

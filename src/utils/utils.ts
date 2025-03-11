@@ -154,9 +154,10 @@ export async function doMergeConflictsExistOnCurrentBranch(): Promise<boolean> {
 /**
  * Get the file containing the version for this repository
  */
-function getVersionFilePath(): { versionFile: string; versionFilePath: string } {
-	const versionFile =
-		Object.keys(versionFiles).find((versionFile) => fs.existsSync(path.join(process.cwd(), `/${versionFile}`))) || '';
+function getVersionFilePath(): { versionFile: keyof typeof versionFiles; versionFilePath: string } {
+	const versionFile = (Object.keys(versionFiles).find((versionFile) =>
+		fs.existsSync(path.join(process.cwd(), `/${versionFile}`)),
+	) || '') as keyof typeof versionFiles;
 	return {
 		versionFile,
 		versionFilePath: path.join(process.cwd(), `/${versionFile}`),
@@ -290,7 +291,7 @@ export async function createAndCheckoutBranch(
 		try {
 			// If the branch already exists, this command will throw an error (but we don't care)
 			await execGitCmd(['checkout', '-b', branch], gitConfig);
-		} catch {}
+		} catch  {}
 		if (!(await checkoutBranch(branch))) {
 			return false;
 		}

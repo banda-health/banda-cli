@@ -128,7 +128,7 @@ describe('deploy', () => {
 		it('fails if git is not installed', async () => {
 			mockedUtils.isGitInstalled = jest.fn().mockReturnValue(false);
 			try {
-				await handler({});
+				await handler();
 				expect(true).toBe(false);
 			} catch {
 				expect(loggedOutput[loggedOutput.length - 1]).toBe(chalk.red(getErrorMessage(ErrorMessage.GitNotInstalled)));
@@ -137,7 +137,7 @@ describe('deploy', () => {
 		it('stops if current directory is not a git repository', async () => {
 			mockedUtils.isCurrentDirectoryGitRepo = jest.fn().mockReturnValue(Promise.resolve(false));
 			try {
-				await handler({});
+				await handler();
 				expect(true).toBe(false);
 			} catch {
 				expect(loggedOutput[loggedOutput.length - 1]).toBe(
@@ -149,7 +149,7 @@ describe('deploy', () => {
 			mockedUtils.isGitInstalled = jest.fn().mockReturnValue(true);
 			mockedUtils.isWorkingDirectoryClean = jest.fn().mockReturnValue(false);
 			try {
-				await handler({});
+				await handler();
 				expect(true).toBe(false);
 			} catch {
 				expect(loggedOutput[loggedOutput.length - 1]).toBe(chalk.red(getErrorMessage(ErrorMessage.WorkspaceNotClean)));
@@ -162,7 +162,7 @@ describe('deploy', () => {
 			configureToOnlyRunVariableInput();
 			const continuePrompt = getQuestion(Question.ContinuePreviousProcess);
 			try {
-				await handler({});
+				await handler();
 				expect(true).toBe(false);
 			} catch {
 				confirmTestExitedAfterRunVariableInput();
@@ -174,13 +174,13 @@ describe('deploy', () => {
 			configureToOnlyRunVariableInput();
 			const resumingMessage = getStatusMessage(StatusMessage.Resuming);
 			try {
-				await handler({});
+				await handler();
 			} catch {}
 			confirmTestExitedAfterRunVariableInput();
 			loggedOutput.length = 0;
 			addContinuationResponse();
 			try {
-				await handler({});
+				await handler();
 			} catch {}
 			confirmTestExitedAfterRunVariableInput();
 			expect(loggedOutput.some((loggedValue) => loggedValue === resumingMessage)).toBe(true);
@@ -190,13 +190,13 @@ describe('deploy', () => {
 			configureToOnlyRunVariableInput();
 			const resumingMessage = getStatusMessage(StatusMessage.Resuming);
 			try {
-				await handler({});
+				await handler();
 			} catch {}
 			confirmTestExitedAfterRunVariableInput();
 			loggedOutput.length = 0;
 			setupSuccessfulVariableInput(true);
 			try {
-				await handler({});
+				await handler();
 			} catch {}
 			confirmTestExitedAfterRunVariableInput(); //check
 			expect(loggedOutput.some((loggedValue) => loggedValue === resumingMessage)).toBe(false);
@@ -206,10 +206,12 @@ describe('deploy', () => {
 			// Any connection break will simply cause this method to return false
 			mockedUtils.doesRemoteExist = jest.fn().mockReturnValue(Promise.resolve(false));
 			try {
-				await handler({});
+				await handler();
 				expect(true).toBe(false);
 			} catch {
-				expect(loggedOutput[loggedOutput.length - 1]).toBe(chalk.red(getErrorMessage(ErrorMessage.RemoteDoesNotExist, REMOTE)));
+				expect(loggedOutput[loggedOutput.length - 1]).toBe(
+					chalk.red(getErrorMessage(ErrorMessage.RemoteDoesNotExist, REMOTE)),
+				);
 			}
 		});
 		it('if the same source and target branches are selected, a rejected promise is returned', async () => {
@@ -220,7 +222,7 @@ describe('deploy', () => {
 				.mockReturnValueOnce({ answer: branch.SOURCE });
 			mockedUtils.doesRemoteExist = jest.fn().mockReturnValue(true);
 			try {
-				await handler({});
+				await handler();
 				expect(true).toBe(false);
 			} catch {
 				expect(true).toBe(true);
@@ -235,7 +237,7 @@ describe('deploy', () => {
 				.mockReturnValueOnce({ answer: branch.TARGET });
 			mockedUtils.doesRemoteExist = jest.fn().mockReturnValue(true);
 			try {
-				await handler({});
+				await handler();
 				expect(true).toBe(false);
 			} catch {
 				expect(true).toBe(true);
@@ -256,7 +258,7 @@ describe('deploy', () => {
 				.mockReturnValueOnce({ answer: version.USE })
 				.mockReturnValueOnce({ answer: version.NEXT });
 			try {
-				await handler({});
+				await handler();
 				expect(true).toBe(false);
 			} catch {
 				confirmTestExitedAfterRunVariableInput();
@@ -268,7 +270,7 @@ describe('deploy', () => {
 			setupSuccessfulVariableInput();
 			configureToOnlyRunVariableInput();
 			try {
-				await handler({});
+				await handler();
 				expect(true).toBe(false);
 			} catch {
 				const fileData = Object.values(require('fs').__getMockFileData() as { [fileName: string]: string });
@@ -301,7 +303,7 @@ describe('deploy', () => {
 
 		it('runs successfully', async () => {
 			try {
-				await handler({});
+				await handler();
 			} catch {
 				expect(true).toBe(false);
 			}
@@ -310,7 +312,7 @@ describe('deploy', () => {
 		it(`doesn't try to update version numbers if there isn't a change`, async () => {
 			const targetUpdateLog = getStatusMessage(StatusMessage.BranchPackageVersionUpdate, version.TARGET, version.USE);
 			try {
-				await handler({});
+				await handler();
 			} catch {
 				expect(true).toBe(false);
 			}
@@ -320,7 +322,7 @@ describe('deploy', () => {
 			mockedUtils.mergeBranch = jest.fn().mockReturnValue(Promise.reject());
 			mockedUtils.doMergeConflictsExistOnCurrentBranch = jest.fn().mockReturnValue(Promise.resolve(true));
 			try {
-				await handler({});
+				await handler();
 				expect(true).toBe(false);
 			} catch {
 				expect(loggedOutput[loggedOutput.length - 1]).toBe(
@@ -329,7 +331,7 @@ describe('deploy', () => {
 			}
 			resetWithContinuation();
 			try {
-				await handler({});
+				await handler();
 			} catch {
 				expect(true).toBe(false);
 			}
@@ -341,7 +343,7 @@ describe('deploy', () => {
 		it(`exits the process if the user doesn't have rights to push to target branch`, async () => {
 			mockedUtils.pushToRemote = jest.fn().mockReturnValue(Promise.resolve(false));
 			try {
-				await handler({});
+				await handler();
 				expect(true).toBe(false);
 			} catch {
 				expect(loggedOutput[loggedOutput.length - 1]).toBe(
@@ -350,7 +352,7 @@ describe('deploy', () => {
 			}
 			resetWithContinuation();
 			try {
-				await handler({});
+				await handler();
 			} catch {
 				expect(true).toBe(false);
 			}
@@ -366,14 +368,14 @@ describe('deploy', () => {
 				.mockReturnValue(Promise.resolve(false))
 				.mockReturnValueOnce(Promise.resolve(true));
 			try {
-				await handler({});
+				await handler();
 				expect(true).toBe(false);
 			} catch {
 				expect(loggedOutput[loggedOutput.length - 1]).toBe(chalk.red(getErrorMessage(ErrorMessage.CannotPushTags)));
 			}
 			resetWithContinuation();
 			try {
-				await handler({});
+				await handler();
 			} catch {
 				expect(true).toBe(false);
 			}
@@ -391,7 +393,7 @@ describe('deploy', () => {
 				.mockReturnValueOnce(Promise.resolve(true));
 			mockedUtils.doMergeConflictsExistOnCurrentBranch = jest.fn().mockReturnValue(Promise.resolve(true));
 			try {
-				await handler({});
+				await handler();
 				expect(true).toBe(false);
 			} catch {
 				expect(loggedOutput[loggedOutput.length - 1]).toBe(
@@ -400,7 +402,7 @@ describe('deploy', () => {
 			}
 			resetWithContinuation();
 			try {
-				await handler({});
+				await handler();
 			} catch {
 				expect(true).toBe(false);
 			}
@@ -420,7 +422,7 @@ describe('deploy', () => {
 				.mockReturnValueOnce(Promise.resolve());
 			mockedUtils.doMergeConflictsExistOnCurrentBranch = jest.fn().mockReturnValue(Promise.resolve(true));
 			try {
-				await handler({});
+				await handler();
 				expect(true).toBe(false);
 			} catch {
 				expect(loggedOutput[loggedOutput.length - 1]).toBe(
@@ -429,7 +431,7 @@ describe('deploy', () => {
 			}
 			resetWithContinuation();
 			try {
-				await handler({});
+				await handler();
 			} catch {
 				expect(true).toBe(false);
 			}
@@ -447,7 +449,7 @@ describe('deploy', () => {
 				.mockReturnValue(Promise.resolve(false))
 				.mockReturnValueOnce(Promise.resolve(true))
 				.mockReturnValueOnce(Promise.resolve(true));
-			await handler({});
+			await handler();
 			expect(loggedOutput[loggedOutput.length - 2]).toBe(
 				getStatusMessage(StatusMessage.MergeOnRemoteToFinish, branch.DEVELOPMENT_MERGE),
 			);
