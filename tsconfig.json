@@ -1,13 +1,26 @@
 {
 	"compilerOptions": {
-		"target": "es5",
-		"module": "commonjs",
-		"lib": ["es2015"],
-		"outDir": "./build",
+		"tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tsbuildinfo",
+		"target": "ESNext",
+		"lib": ["ESNext"],
+		"module": "NodeNext",
+		"skipLibCheck": true,
 		"allowJs": false,
-		"esModuleInterop": true,
-		"declaration": true
+
+		/* Bundler mode */
+		"moduleResolution": "nodenext",
+		"isolatedModules": true,
+		"moduleDetection": "force",
+		"outDir": "build",
+
+		/* Linting */
+		"strict": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noFallthroughCasesInSwitch": true,
+		"noUncheckedSideEffectImports": true,
+
+		"types": ["vitest/globals"]
 	},
-	"include": ["src/**/*"],
-	"exclude": ["node_modules", "**/*.spec.ts", "**/__tests__/*", "**/__mocks__"]
+	"include": ["src"]
 }

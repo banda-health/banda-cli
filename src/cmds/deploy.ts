@@ -1,16 +1,16 @@
 import chalk from 'chalk';
 import { Command } from 'commander';
-import fs from 'fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import inquirer from 'inquirer';
 import { semverRegex } from '../utils/constants';
 import {
 	commitMessage,
-	ErrorMessage,
+	errorMessage,
 	getErrorMessage,
 	getQuestion,
 	getStatusMessage,
-	Question,
-	StatusMessage,
+	question,
+	statusMessage,
 } from '../utils/messages';
 import {
 	checkoutBranch,
@@ -112,19 +112,19 @@ export function resetState() {
 async function checkPrerequisites(): Promise<string> {
 	// Check if git is installed
 	if (!(await isGitInstalled())) {
-		return Promise.reject(getErrorMessage(ErrorMessage.GitNotInstalled));
+		return Promise.reject(getErrorMessage(errorMessage.GitNotInstalled));
 	}
 	// Ensure the current directory is a git repository
 	if (!(await isCurrentDirectoryGitRepo())) {
-		return Promise.reject(getErrorMessage(ErrorMessage.CurrentDirectoryNotGitRepo));
+		return Promise.reject(getErrorMessage(errorMessage.CurrentDirectoryNotGitRepo));
 	}
 	// Ensure working directory is clean
 	if (!(await isWorkingDirectoryClean())) {
-		return Promise.reject(getErrorMessage(ErrorMessage.WorkspaceNotClean));
+		return Promise.reject(getErrorMessage(errorMessage.WorkspaceNotClean));
 	}
 	// Ensure progress directory is created
-	if (!fs.existsSync(progressFile.directory)) {
-		fs.mkdirSync(progressFile.directory);
+	if (!existsSync(progressFile.directory)) {
+		mkdirSync(progressFile.directory);
 	}
 	return Promise.resolve('');
 }
@@ -133,7 +133,7 @@ async function checkPrerequisites(): Promise<string> {
  * Save the variables a user entered so they can be used if a run is interrupted and needs to be resumed
  */
 function saveUsersVariables(): void {
-	fs.writeFileSync(
+	writeFileSync(
 		progressFile.variableSaveFile,
 		JSON.stringify({
 			remote,
@@ -152,7 +152,7 @@ function saveUsersVariables(): void {
  * Load the variables saved on the previous run-through
  */
 function loadUsersVariables(): void {
-	const usersVariables = JSON.parse(fs.readFileSync(progressFile.variableSaveFile, 'utf8')) as UsersVariables;
+	const usersVariables = JSON.parse(readFileSync(progressFile.variableSaveFile, 'utf8')) as UsersVariables;
 	remote = usersVariables.remote;
 	sourceBranch = usersVariables.sourceBranch;
 	targetBranch = usersVariables.targetBranch;
@@ -167,32 +167,32 @@ function loadUsersVariables(): void {
  */
 function resetDeploy(): void {
 	try {
-		fs.unlinkSync(progressFile.variableSaveFile);
+		unlinkSync(progressFile.variableSaveFile);
 	} catch {
 		// File doesn't exit
 	}
 	try {
-		fs.unlinkSync(progressFile.sourceMergeLockFile);
+		unlinkSync(progressFile.sourceMergeLockFile);
 	} catch {
 		// File doesn't exit
 	}
 	try {
-		fs.unlinkSync(progressFile.targetMergeLockFile);
+		unlinkSync(progressFile.targetMergeLockFile);
 	} catch {
 		// File doesn't exit
 	}
 	try {
-		fs.unlinkSync(progressFile.taggingLockFile);
+		unlinkSync(progressFile.taggingLockFile);
 	} catch {
 		// File doesn't exit
 	}
 	try {
-		fs.unlinkSync(progressFile.developmentPullMergeLockFile);
+		unlinkSync(progressFile.developmentPullMergeLockFile);
 	} catch {
 		// File doesn't exit
 	}
 	try {
-		fs.unlinkSync(progressFile.developmentMergeLockFile);
+		unlinkSync(progressFile.developmentMergeLockFile);
 	} catch {
 		// File doesn't exit
 	}
@@ -202,7 +202,7 @@ function resetDeploy(): void {
  * Determines whether the previous process can be continued or not
  */
 function canThePreviousProcessBeContinued() {
-	return fs.existsSync(progressFile.variableSaveFile);
+	return existsSync(progressFile.variableSaveFile);
 }
 
 /**
@@ -211,32 +211,22 @@ function canThePreviousProcessBeContinued() {
  * @param withNewLine Whether a newLine should be inserted at the end of the log (default true)
  * @param additionalMessageParameters Any additional parameters to log
  */
-function logStatus(
-	logMessage: StatusMessage | string,
-	withNewLine: boolean = true,
-	...additionalMessageParameters: string[]
-) {
+function logStatus(logMessage: string, withNewLine: boolean = true, ...additionalMessageParameters: string[]) {
+	let messageToLog = logMessage;
+	if (statusMessage.hasOwnProperty(logMessage)) {
+		messageToLog = getStatusMessage(logMessage as keyof typeof statusMessage, ...additionalMessageParameters);
+	}
 	if (withNewLine) {
-		if (typeof logMessage === 'string') {
-			console.log(logMessage);
-			return;
-		}
-		console.log(getStatusMessage(logMessage, ...additionalMessageParameters));
+		console.log(messageToLog);
 	} else {
-		if (typeof logMessage === 'string') {
-			process.stdout.write(logMessage);
-			return;
-		}
-		process.stdout.write(getStatusMessage(logMessage, ...additionalMessageParameters));
+		process.stdout.write(messageToLog);
 	}
 }
 
 /**
  * Log an error message to the appropriate location
- * @param logType ErrorMessage
- * @param additionalMessageParameters Any additional parameters to log
  */
-function logError(logType: ErrorMessage, ...additionalMessageParameters: string[]) {
+function logError(logType: (typeof errorMessage)[keyof typeof errorMessage], ...additionalMessageParameters: string[]) {
 	console.log(getErrorMessage(logType, ...additionalMessageParameters));
 }
 
@@ -247,19 +237,19 @@ function logError(logType: ErrorMessage, ...additionalMessageParameters: string[
 async function checkIfRemoteExists(remote: string, branch?: string): Promise<string> {
 	// If no branch provided, just check the remote
 	if (!branch) {
-		logStatus(StatusMessage.CheckRemote, false, remote);
+		logStatus(statusMessage.CheckRemote, false, remote);
 		if (await doesRemoteExist(remote)) {
-			logStatus(StatusMessage.Confirmed);
+			logStatus(statusMessage.Confirmed);
 		} else {
-			return Promise.reject(getErrorMessage(ErrorMessage.RemoteDoesNotExist, remote));
+			return Promise.reject(getErrorMessage(errorMessage.RemoteDoesNotExist, remote));
 		}
 	} else {
-		logStatus(StatusMessage.CheckBranch, false, branch, remote);
+		logStatus(statusMessage.CheckBranch, false, branch, remote);
 		// Confirm that this branch exists on remote
 		if (await doesRemoteExist(remote, branch)) {
-			logStatus(StatusMessage.Confirmed);
+			logStatus(statusMessage.Confirmed);
 		} else {
-			return Promise.reject(getErrorMessage(ErrorMessage.BranchDoesNotExist, branch));
+			return Promise.reject(getErrorMessage(errorMessage.BranchDoesNotExist, branch));
 		}
 	}
 	return Promise.resolve('');
@@ -284,13 +274,13 @@ async function getVariables(): Promise<string> {
 				{
 					type: 'confirm',
 					name: QUESTION_ANSWER_PROPERTY,
-					message: getQuestion(Question.ContinuePreviousProcess),
+					message: getQuestion(question.ContinuePreviousProcess),
 					default: true,
 				},
 			])
 		)[QUESTION_ANSWER_PROPERTY] as boolean;
 		if (userWantsToContinuePreviousProcess) {
-			logStatus(StatusMessage.Resuming);
+			logStatus(statusMessage.Resuming);
 			loadUsersVariables();
 			return Promise.resolve('');
 		}
@@ -303,7 +293,7 @@ async function getVariables(): Promise<string> {
 			{
 				type: 'input',
 				name: QUESTION_ANSWER_PROPERTY,
-				message: getQuestion(Question.GitRemoteToUse),
+				message: getQuestion(question.GitRemoteToUse),
 				default: defaultRemote,
 			},
 		])
@@ -320,7 +310,7 @@ async function getVariables(): Promise<string> {
 			{
 				type: 'input',
 				name: QUESTION_ANSWER_PROPERTY,
-				message: getQuestion(Question.SourceBranchToUse),
+				message: getQuestion(question.SourceBranchToUse),
 				default: sourceBranchToSuggest,
 			},
 		])
@@ -333,13 +323,13 @@ async function getVariables(): Promise<string> {
 			{
 				type: 'input',
 				name: QUESTION_ANSWER_PROPERTY,
-				message: getQuestion(Question.TargetBranchToUse),
+				message: getQuestion(question.TargetBranchToUse),
 				default: defaultTargetBranch,
 			},
 		])
 	)[QUESTION_ANSWER_PROPERTY];
 	if (targetBranch === sourceBranch) {
-		return Promise.reject(getErrorMessage(ErrorMessage.TargetAndSourceBranchesMustDiffer));
+		return Promise.reject(getErrorMessage(errorMessage.TargetAndSourceBranchesMustDiffer));
 	}
 	await checkIfRemoteExists(remote, targetBranch);
 
@@ -349,71 +339,71 @@ async function getVariables(): Promise<string> {
 			{
 				type: 'input',
 				name: QUESTION_ANSWER_PROPERTY,
-				message: getQuestion(Question.DevelopmentBranchToUse),
+				message: getQuestion(question.DevelopmentBranchToUse),
 				default: defaultDevelopmentBranch,
 			},
 		])
 	)[QUESTION_ANSWER_PROPERTY];
 	if (developmentBranch === targetBranch) {
-		return Promise.reject(getErrorMessage(ErrorMessage.DevelopmentAndTargetBranchesMustDiffer));
+		return Promise.reject(getErrorMessage(errorMessage.DevelopmentAndTargetBranchesMustDiffer));
 	}
 
 	// Only check if this branch exists if we haven't already checked for it
 	if (developmentBranch === sourceBranch) {
-		logStatus(StatusMessage.AlreadyConfirmedBranchExists, true, developmentBranch);
+		logStatus(statusMessage.AlreadyConfirmedBranchExists, true, developmentBranch);
 	} else {
 		await checkIfRemoteExists(remote, developmentBranch);
 	}
 
 	// Check out the target branch so we can get that version
-	logStatus(StatusMessage.FetchingTargetBranch, false, targetBranch);
+	logStatus(statusMessage.FetchingTargetBranch, false, targetBranch);
 	if (!(await checkoutBranch(targetBranch))) {
-		return Promise.reject(getErrorMessage(ErrorMessage.CouldNotCheckOutBranch, targetBranch));
+		return Promise.reject(getErrorMessage(errorMessage.CouldNotCheckOutBranch, targetBranch));
 	}
 	// See if we get any merge conflicts
 	if (!(await isBranchCleanWhenUpdatedFromRemote(remote, targetBranch))) {
-		return Promise.reject(getErrorMessage(ErrorMessage.MergeConflictsOnPullToFix, targetBranch));
+		return Promise.reject(getErrorMessage(errorMessage.MergeConflictsOnPullToFix, targetBranch));
 	}
-	logStatus(StatusMessage.Done);
+	logStatus(statusMessage.Done);
 
 	// Get the current app version
 	const targetPackageVersion = await getRepositoryVersion();
 
 	// Check out the source branch so we can get that version
-	logStatus(StatusMessage.FetchingSourceBranch, false, sourceBranch);
+	logStatus(statusMessage.FetchingSourceBranch, false, sourceBranch);
 	if (!(await checkoutBranch(sourceBranch))) {
-		return Promise.reject(getErrorMessage(ErrorMessage.CouldNotCheckOutBranch, sourceBranch));
+		return Promise.reject(getErrorMessage(errorMessage.CouldNotCheckOutBranch, sourceBranch));
 	}
 	// Make sure no merge conflicts exist
 	if (!(await isBranchCleanWhenUpdatedFromRemote(remote, sourceBranch))) {
-		return Promise.reject(getErrorMessage(ErrorMessage.MergeConflictsOnPullToFix, sourceBranch));
+		return Promise.reject(getErrorMessage(errorMessage.MergeConflictsOnPullToFix, sourceBranch));
 	}
-	logStatus(StatusMessage.Done);
+	logStatus(statusMessage.Done);
 
 	// Get the current app version
 	const sourcePackageVersion = await getRepositoryVersion();
 
 	// Ask the user what version they want to use
-	logStatus(StatusMessage.SourceAndTargetVersion, true, sourcePackageVersion, targetPackageVersion);
+	logStatus(statusMessage.SourceAndTargetVersion, true, sourcePackageVersion, targetPackageVersion);
 	const packageQuestion: Parameters<typeof inquirer.prompt>[0] = {
 		type: 'input',
 		name: QUESTION_ANSWER_PROPERTY,
-		message: getQuestion(Question.VersionNumberToUse),
+		message: getQuestion(question.VersionNumberToUse),
 		default: sourcePackageVersion,
 	};
 	while (!packageVersion || !semverRegex.test(packageVersion)) {
 		if (packageVersion) {
-			logError(ErrorMessage.VersionFormatWrong, packageVersion);
+			logError(errorMessage.VersionFormatWrong, packageVersion);
 		}
 		packageVersion = (await inquirer.prompt([packageQuestion]))[QUESTION_ANSWER_PROPERTY];
 	}
 
 	tag = createReleaseTag(packageVersion);
-	logStatus(StatusMessage.CheckingTagUniqueness, false);
+	logStatus(statusMessage.CheckingTagUniqueness, false);
 	if (await doesTagExist(tag)) {
-		return Promise.reject(getErrorMessage(ErrorMessage.TagExists, tag));
+		return Promise.reject(getErrorMessage(errorMessage.TagExists, tag));
 	}
-	logStatus(StatusMessage.Confirmed);
+	logStatus(statusMessage.Confirmed);
 
 	// Get the next version to suggest
 	// First, get the major version
@@ -423,13 +413,13 @@ async function getVariables(): Promise<string> {
 	const nextPackageQuestion: Parameters<typeof inquirer.prompt>[0] = {
 		type: 'input',
 		name: QUESTION_ANSWER_PROPERTY,
-		message: getQuestion(Question.NextVersionToUse, developmentBranch),
+		message: getQuestion(question.NextVersionToUse, developmentBranch),
 		default: suggestedNextPackageVersion,
 	};
 	// Have a loop to make sure the version gets entered in the correct format
 	while (!nextPackageVersion || !semverRegex.test(nextPackageVersion)) {
 		if (nextPackageVersion) {
-			logError(ErrorMessage.VersionFormatWrong, nextPackageVersion);
+			logError(errorMessage.VersionFormatWrong, nextPackageVersion);
 		}
 		nextPackageVersion = (await inquirer.prompt([nextPackageQuestion]))[QUESTION_ANSWER_PROPERTY];
 	}
@@ -475,11 +465,11 @@ async function run(): Promise<string> {
 	const releaseBranch = createReleaseBranchName(tag);
 	const developmentMergeBranch = createDevelopmentMergeBranchName(targetBranch, developmentBranch);
 
-	const sourceMergeLockFileIsMissing = !fs.existsSync(progressFile.sourceMergeLockFile);
-	const targetMergeLockFileIsMissing = !fs.existsSync(progressFile.targetMergeLockFile);
-	const taggingLockFileIsMissing = !fs.existsSync(progressFile.taggingLockFile);
-	const developmentPullMergeLockFileIsMissing = !fs.existsSync(progressFile.developmentPullMergeLockFile);
-	const developmentMergeLockFileIsMissing = !fs.existsSync(progressFile.developmentMergeLockFile);
+	const sourceMergeLockFileIsMissing = !existsSync(progressFile.sourceMergeLockFile);
+	const targetMergeLockFileIsMissing = !existsSync(progressFile.targetMergeLockFile);
+	const taggingLockFileIsMissing = !existsSync(progressFile.taggingLockFile);
+	const developmentPullMergeLockFileIsMissing = !existsSync(progressFile.developmentPullMergeLockFile);
+	const developmentMergeLockFileIsMissing = !existsSync(progressFile.developmentMergeLockFile);
 
 	// If the development merge lock file exists, skip this section
 	if (developmentMergeLockFileIsMissing) {
@@ -491,13 +481,13 @@ async function run(): Promise<string> {
 				if (targetMergeLockFileIsMissing) {
 					// If the source to target lock file exists, skip this section to resume where the process left off
 					if (sourceMergeLockFileIsMissing) {
-						logStatus(StatusMessage.CreatingReleaseBranch, true, releaseBranch, targetBranch);
+						logStatus(statusMessage.CreatingReleaseBranch, true, releaseBranch, targetBranch);
 						if (!(await createAndCheckoutBranch(releaseBranch, targetBranch))) {
-							return Promise.reject(getErrorMessage(ErrorMessage.CouldNotCreateBranch, releaseBranch));
+							return Promise.reject(getErrorMessage(errorMessage.CouldNotCreateBranch, releaseBranch));
 						}
 
 						// Merge source to release branch
-						logStatus(StatusMessage.Merge, true, sourceBranch, releaseBranch);
+						logStatus(statusMessage.Merge, true, sourceBranch, releaseBranch);
 						try {
 							await mergeBranch(sourceBranch);
 						} catch (e) {
@@ -506,7 +496,7 @@ async function run(): Promise<string> {
 							if (await doMergeConflictsExistOnCurrentBranch()) {
 								// Yep, there was a merge conflict
 								touch(progressFile.sourceMergeLockFile);
-								return Promise.reject(getErrorMessage(ErrorMessage.FixReleaseBranchMergeConflicts, releaseBranch));
+								return Promise.reject(getErrorMessage(errorMessage.FixReleaseBranchMergeConflicts, releaseBranch));
 							}
 							// Otherwise, an error occurred that wasn't related to merging
 							return Promise.reject(e);
@@ -514,7 +504,7 @@ async function run(): Promise<string> {
 					} else {
 						// Remove the lock file since it's not needed anymore
 						try {
-							fs.unlinkSync(progressFile.sourceMergeLockFile);
+							unlinkSync(progressFile.sourceMergeLockFile);
 						} catch {}
 					}
 
@@ -525,20 +515,20 @@ async function run(): Promise<string> {
 					}
 					const currentPackageVersion = await getRepositoryVersion();
 					if (currentPackageVersion !== packageVersion) {
-						logStatus(StatusMessage.ReleaseBranchPackageVersionUpdate, false, packageVersion, releaseBranch);
+						logStatus(statusMessage.ReleaseBranchPackageVersionUpdate, false, packageVersion, releaseBranch);
 						await updateRepositoryVersion(currentPackageVersion, packageVersion);
 
 						// Commit changes to release branch
 						if (!(await commitToBranch(commitMessage.UPDATE_APP_VERSION))) {
 							// TODO: do anything here?
 						}
-						logStatus(StatusMessage.Done);
+						logStatus(statusMessage.Done);
 					} else {
-						logStatus(StatusMessage.NoPackageUpdateNeeded);
+						logStatus(statusMessage.NoPackageUpdateNeeded);
 					}
 
 					// Merge release to target
-					logStatus(StatusMessage.Merge, true, releaseBranch, targetBranch);
+					logStatus(statusMessage.Merge, true, releaseBranch, targetBranch);
 					if (!(await checkoutBranch(targetBranch))) {
 						// TODO: do anything here?
 					}
@@ -547,30 +537,30 @@ async function run(): Promise<string> {
 					} catch {}
 
 					// Push the new target branch
-					logStatus(StatusMessage.PushingToRemote, false, targetBranch);
+					logStatus(statusMessage.PushingToRemote, false, targetBranch);
 					if (!(await pushToRemote(remote, targetBranch))) {
 						// If there was an error with the previous command, it (probably) means they don't have permission to write to this branch
 						// Since they can't push to the target branch, push the release and say they need to have someone else merge it
 						logStatus('');
-						logError(ErrorMessage.CannotPushBranch, targetBranch, releaseBranch);
+						logError(errorMessage.CannotPushBranch, targetBranch, releaseBranch);
 						if (!(await checkoutBranch(releaseBranch))) {
 							// TODO: do anything here?
 						}
-						logStatus(StatusMessage.PushingToRemote, false, releaseBranch);
+						logStatus(statusMessage.PushingToRemote, false, releaseBranch);
 						if (!(await pushToRemote(remote, releaseBranch, true))) {
 							// TODO: do anything here?
 						}
-						logStatus(StatusMessage.Done);
+						logStatus(statusMessage.Done);
 						touch(progressFile.targetMergeLockFile);
-						return Promise.reject(getErrorMessage(ErrorMessage.HaveSomeoneMerge, releaseBranch));
+						return Promise.reject(getErrorMessage(errorMessage.HaveSomeoneMerge, releaseBranch));
 					}
-					logStatus(StatusMessage.Done);
+					logStatus(statusMessage.Done);
 				} else {
 					// We're assuming the release branch has been merged...
-					logStatus(StatusMessage.AssumingBranchMerged, true, releaseBranch, targetBranch);
+					logStatus(statusMessage.AssumingBranchMerged, true, releaseBranch, targetBranch);
 					// Remove the lock file since it's not needed anymore
 					try {
-						fs.unlinkSync(progressFile.targetMergeLockFile);
+						unlinkSync(progressFile.targetMergeLockFile);
 					} catch {}
 					// Delete remote release branch
 					if (!(await deleteRemoteBranch(remote, releaseBranch))) {
@@ -582,35 +572,35 @@ async function run(): Promise<string> {
 				await deleteLocalBranch(releaseBranch);
 
 				// Create tag at merged commit
-				logStatus(StatusMessage.FetchingBranchFromRemote, false, targetBranch);
+				logStatus(statusMessage.FetchingBranchFromRemote, false, targetBranch);
 				await checkoutBranch(targetBranch);
 				await pullBranchFromRemote(remote, targetBranch);
-				logStatus(StatusMessage.Done);
-				logStatus(StatusMessage.CreatingTag, true, tag, targetBranch);
+				logStatus(statusMessage.Done);
+				logStatus(statusMessage.CreatingTag, true, tag, targetBranch);
 				await createTag(tag, `Merging branch '${releaseBranch}'`);
 			} else {
 				try {
-					fs.unlinkSync(progressFile.taggingLockFile);
+					unlinkSync(progressFile.taggingLockFile);
 				} catch {}
 			}
 
 			await checkoutBranch(targetBranch);
 			// Push tag
-			logStatus(StatusMessage.PushingTagToRemote, false, tag);
+			logStatus(statusMessage.PushingTagToRemote, false, tag);
 			if (!(await pushToRemote(remote, tag))) {
 				// If there was an error, we have to wait again
 				touch(progressFile.taggingLockFile);
-				return Promise.reject(getErrorMessage(ErrorMessage.CannotPushTags));
+				return Promise.reject(getErrorMessage(errorMessage.CannotPushTags));
 			}
-			logStatus(StatusMessage.Done);
+			logStatus(statusMessage.Done);
 		} else {
 			try {
-				fs.unlinkSync(progressFile.developmentPullMergeLockFile);
+				unlinkSync(progressFile.developmentPullMergeLockFile);
 			} catch {}
 		}
 
 		// Checkout development branch
-		logStatus(StatusMessage.FetchingDevelopmentBranch, false, developmentBranch);
+		logStatus(statusMessage.FetchingDevelopmentBranch, false, developmentBranch);
 		await checkoutBranch(developmentBranch);
 		// See if we get any merge conflicts
 		if (!(await pullBranchFromRemote(remote, developmentBranch))) {
@@ -618,26 +608,26 @@ async function run(): Promise<string> {
 			// See if there were any merge conflicts
 			if (await doMergeConflictsExistOnCurrentBranch()) {
 				// Yep, there were merge conflicts
-				return Promise.reject(getErrorMessage(ErrorMessage.MergeConflictsOnPull));
+				return Promise.reject(getErrorMessage(errorMessage.MergeConflictsOnPull));
 			}
 			// Otherwise, an error occurred when pulling
-			return Promise.reject(getErrorMessage(ErrorMessage.ErrorOnPull, developmentBranch));
+			return Promise.reject(getErrorMessage(errorMessage.ErrorOnPull, developmentBranch));
 		}
-		logStatus(StatusMessage.Done);
+		logStatus(statusMessage.Done);
 
 		// Merge target branch to development branch
-		logStatus(StatusMessage.CreatingTemporaryMergeBranch, false, developmentMergeBranch, developmentBranch);
+		logStatus(statusMessage.CreatingTemporaryMergeBranch, false, developmentMergeBranch, developmentBranch);
 		await createAndCheckoutBranch(developmentMergeBranch, developmentBranch);
-		logStatus(StatusMessage.Done);
+		logStatus(statusMessage.Done);
 	} else {
 		try {
-			fs.unlinkSync(progressFile.developmentMergeLockFile);
+			unlinkSync(progressFile.developmentMergeLockFile);
 		} catch {}
 	}
 
 	// Make sure there aren't any merge conflicts
 	await checkoutBranch(developmentMergeBranch);
-	logStatus(StatusMessage.Merge, true, targetBranch, developmentMergeBranch);
+	logStatus(statusMessage.Merge, true, targetBranch, developmentMergeBranch);
 	try {
 		await mergeBranch(targetBranch);
 	} catch (e) {
@@ -645,7 +635,7 @@ async function run(): Promise<string> {
 		if (await doMergeConflictsExistOnCurrentBranch()) {
 			// Yep, there were merge conflicts
 			touch(progressFile.developmentMergeLockFile);
-			return Promise.reject(getErrorMessage(ErrorMessage.MergeConflictsOnMerge));
+			return Promise.reject(getErrorMessage(errorMessage.MergeConflictsOnMerge));
 		}
 		touch(progressFile.developmentMergeLockFile);
 		return Promise.reject(e);
@@ -654,39 +644,39 @@ async function run(): Promise<string> {
 	// Update version number in appropriate file, if necessary
 	const currentPackageVersion = await getRepositoryVersion();
 	if (currentPackageVersion !== nextPackageVersion) {
-		logStatus(StatusMessage.BranchPackageVersionUpdate, false, nextPackageVersion, developmentMergeBranch);
+		logStatus(statusMessage.BranchPackageVersionUpdate, false, nextPackageVersion, developmentMergeBranch);
 		await updateRepositoryVersion(currentPackageVersion, nextPackageVersion);
 
 		// Commit changes to development merge branch
 		await commitToBranch(commitMessage.UPDATE_APP_VERSION);
-		logStatus(StatusMessage.Done);
+		logStatus(statusMessage.Done);
 	} else {
-		logStatus(StatusMessage.NoPackageUpdateNeeded);
+		logStatus(statusMessage.NoPackageUpdateNeeded);
 	}
 
 	// Merge to development branch and push
-	logStatus(StatusMessage.Merge, true, developmentMergeBranch, developmentBranch);
+	logStatus(statusMessage.Merge, true, developmentMergeBranch, developmentBranch);
 	await checkoutBranch(developmentBranch);
 	try {
 		await mergeBranch(developmentMergeBranch);
 	} catch {}
 
-	logStatus(StatusMessage.PushingToRemote, false, developmentBranch);
+	logStatus(statusMessage.PushingToRemote, false, developmentBranch);
 	if (await pushToRemote(remote, developmentBranch)) {
-		logStatus(StatusMessage.Done);
-		logStatus(StatusMessage.RemovingTemporaryMergeBranch, true, developmentMergeBranch);
+		logStatus(statusMessage.Done);
+		logStatus(statusMessage.RemovingTemporaryMergeBranch, true, developmentMergeBranch);
 		await deleteLocalBranch(developmentMergeBranch, false);
 	} else {
 		// Getting here (probably) means they don't have permission to write to this branch
 		// Since they can't push to the target branch, push the release and say they need to have someone else merge it
-		logError(ErrorMessage.CannotPushBranchToFinish, developmentBranch, developmentMergeBranch);
+		logError(errorMessage.CannotPushBranchToFinish, developmentBranch, developmentMergeBranch);
 		await checkoutBranch(developmentMergeBranch);
-		logStatus(StatusMessage.PushingToRemote, false, developmentMergeBranch);
+		logStatus(statusMessage.PushingToRemote, false, developmentMergeBranch);
 		await pushToRemote(remote, developmentMergeBranch, true);
-		logStatus(StatusMessage.Done);
-		logStatus(StatusMessage.RemovingTemporaryMergeBranchLocally, true, developmentMergeBranch);
+		logStatus(statusMessage.Done);
+		logStatus(statusMessage.RemovingTemporaryMergeBranchLocally, true, developmentMergeBranch);
 		await deleteLocalBranch(developmentMergeBranch);
-		logStatus(StatusMessage.MergeOnRemoteToFinish, true, developmentMergeBranch);
+		logStatus(statusMessage.MergeOnRemoteToFinish, true, developmentMergeBranch);
 	}
 	return Promise.resolve('');
 }
@@ -701,7 +691,7 @@ async function finish() {
 	// Check out original branch user was on
 	await checkoutBranch(initialBranch || developmentBranch);
 
-	logStatus(StatusMessage.Finished);
+	logStatus(statusMessage.Finished);
 }
 
 async function main(): Promise<void> {
@@ -711,6 +701,7 @@ async function main(): Promise<void> {
 		await run();
 		await finish();
 	} catch (e) {
+		// console.warn(e);
 		logStatus('');
 		logStatus(chalk.red(e));
 	}

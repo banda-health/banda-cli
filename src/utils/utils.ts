@@ -1,8 +1,8 @@
-import fs from 'fs';
-import path from 'path';
+import { closeSync, existsSync, openSync, readFile, utimesSync, writeFile } from 'fs';
+import { join } from 'path';
 import { execGitCmd } from 'run-git-command';
 import { gitConfig, semverRegex, versionFiles } from './constants';
-import { ErrorMessage, getErrorMessage } from './messages';
+import { errorMessage, getErrorMessage } from './messages';
 
 /**
  * @async
@@ -156,11 +156,11 @@ export async function doMergeConflictsExistOnCurrentBranch(): Promise<boolean> {
  */
 function getVersionFilePath(): { versionFile: keyof typeof versionFiles; versionFilePath: string } {
 	const versionFile = (Object.keys(versionFiles).find((versionFile) =>
-		fs.existsSync(path.join(process.cwd(), `/${versionFile}`)),
+		existsSync(join(process.cwd(), `/${versionFile}`)),
 	) || '') as keyof typeof versionFiles;
 	return {
 		versionFile,
-		versionFilePath: path.join(process.cwd(), `/${versionFile}`),
+		versionFilePath: join(process.cwd(), `/${versionFile}`),
 	};
 }
 
@@ -174,14 +174,14 @@ function getVersionFilePath(): { versionFile: keyof typeof versionFiles; version
 export async function getRepositoryVersion(): Promise<string> {
 	const { versionFile, versionFilePath } = getVersionFilePath();
 	return new Promise((resolve, reject) => {
-		fs.readFile(versionFilePath, 'utf8', (err, data) => {
+		readFile(versionFilePath, 'utf8', (err, data) => {
 			if (err) {
 				reject(err);
 				return;
 			}
 			const match = data.match(new RegExp(versionFiles[versionFile].replace(/#\.#\.#/, '(\\d+\\.\\d+\\.\\d+)')));
 			if (!match || !match.length) {
-				reject(getErrorMessage(ErrorMessage.NoVersionFound));
+				reject(getErrorMessage(errorMessage.NoVersionFound));
 				return;
 			}
 			resolve(match[1]);
@@ -199,7 +199,7 @@ export async function getRepositoryVersion(): Promise<string> {
 export async function updateRepositoryVersion(currentVersion: string, versionToUse: string): Promise<void> {
 	const { versionFile, versionFilePath } = getVersionFilePath();
 	return new Promise((resolve, reject) => {
-		fs.readFile(versionFilePath, 'utf8', (err, data) => {
+		readFile(versionFilePath, 'utf8', (err, data) => {
 			if (err) {
 				reject(err);
 				return;
@@ -208,7 +208,7 @@ export async function updateRepositoryVersion(currentVersion: string, versionToU
 				versionFiles[versionFile].replace(/#\.#\.#/, currentVersion.replace(/\./g, '\\.')),
 			);
 			const result = data.replace(versionRegex, versionFiles[versionFile].replace(/#\.#\.#/, versionToUse));
-			fs.writeFile(versionFilePath, result, 'utf8', (err) => {
+			writeFile(versionFilePath, result, 'utf8', (err) => {
 				if (err) {
 					reject(err);
 					return;
@@ -234,9 +234,9 @@ export function getFileNameSaveCwd(): string {
 export function touch(fileName: string): void {
 	const time = new Date();
 	try {
-		fs.utimesSync(fileName, time, time);
+		utimesSync(fileName, time, time);
 	} catch (err) {
-		fs.closeSync(fs.openSync(fileName, 'w'));
+		closeSync(openSync(fileName, 'w'));
 	}
 }
 
@@ -291,7 +291,7 @@ export async function createAndCheckoutBranch(
 		try {
 			// If the branch already exists, this command will throw an error (but we don't care)
 			await execGitCmd(['checkout', '-b', branch], gitConfig);
-		} catch  {}
+		} catch {}
 		if (!(await checkoutBranch(branch))) {
 			return false;
 		}
